@@ -1,0 +1,49 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    ' Name of the symbol library file
+    Dim oSymbolDrawingName As String = "Library.idw"
+
+    ' Symbol names
+    Dim deleteSymbolName As String = "1st angle projection"
+    Dim insertSymbolName As String = "3rd angle projection"
+
+    ' Check file type
+    If ThisDoc.Document.DocumentType <> kDrawingDocumentObject Then
+        Return
+    End If
+
+    ' Define the drawing document
+    Dim oDrawDoc As DrawingDocument
+    oDrawDoc = ThisApplication.ActiveDocument
+
+    ' Loop through all sheets
+    For Each oSheet As Sheet In oDrawDoc.Sheets
+
+        ' Delete all existing "3rd angle projection" symbols
+        Dim deleteList As New List(Of SketchedSymbol)
+        For Each oSymbol As SketchedSymbol In oSheet.SketchedSymbols
+            If oSymbol.Name = deleteSymbolName Then
+                deleteList.Add(oSymbol)
+            End If
+        Next
+        For Each oSymbol As SketchedSymbol In deleteList
+            oSymbol.Delete()
+        Next
+
+        ' Insert the "1st angle projection" symbol
+        Dim oSketchSymLib As SketchedSymbolDefinitionLibrary
+        oSketchSymLib = oDrawDoc.SketchedSymbolDefinitions.SketchedSymbolDefinitionLibraries.Item(oSymbolDrawingName)
+
+        Dim oSymDef As SketchedSymbolDefinition
+        oSymDef = oDrawDoc.SketchedSymbolDefinitions.AddFromLibrary(oSketchSymLib, insertSymbolName, True)
+
+        ' Position to insert symbol (adjust as needed)
+        Dim oPosition As Point2d = ThisApplication.TransientGeometry.CreatePoint2d(80.4, 8.85)
+
+        ' Place symbol without prompted entries
+        Dim oPlacedSymbol As SketchedSymbol
+        oPlacedSymbol = oSheet.SketchedSymbols.Add(oSymDef, oPosition, 0, 1, )
+    Next
+
+    MessageBox.Show("Replaced all '1st angle projection' symbols with '3rd angle projection'.", "Operation Complete")
+End Sub

@@ -1,0 +1,14 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    Dim oDoc As DrawingDocument
+    oDoc = ThisApplication.ActiveDocument
+    i=1
+    Dim oSheet As Sheet
+    oSheet = oDoc.ActiveSheet
+    For Each oDrawView In oSheet.DrawingViews
+    	Dim oView As DrawingView
+    	oView = oSheet.DrawingViews.Item(i)
+    	oView.ViewStyle = DrawingViewStyleEnum.kHiddenLineRemovedDrawingViewStyle
+		i=i+1
+	Next
+End Sub

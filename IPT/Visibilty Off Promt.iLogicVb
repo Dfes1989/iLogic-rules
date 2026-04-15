@@ -1,0 +1,35 @@
+﻿Sub Main()
+    ' Ensure we are in a Part document
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kPartDocumentObject Then
+        MessageBox.Show("This rule can only be run in a Part document.", "Wrong Document Type")
+        Return
+    End If
+
+    Dim odoc As PartDocument = ThisApplication.ActiveDocument
+    
+    ' (AMENDED) Ask the user what text to look for
+    Dim searchTerm As String = InputBox("Enter the text to search for in Body names:", "Hide Solids by Name", "Void")
+
+    ' (AMENDED) Stop if the user cancels or provides no text
+    If String.IsNullOrEmpty(searchTerm) Then
+        Return
+    End If
+
+    Dim solidBodies As SurfaceBodies = odoc.ComponentDefinition.SurfaceBodies
+    Dim count As Integer = 0
+
+    ' Loop through each solid body
+    For Each body As SurfaceBody In solidBodies
+        ' (AMENDED) Use the user's input instead of the hardcoded "Void"
+        ' We also use UCase to make the search case-insensitive for better reliability
+        If body.Name.ToUpper().Contains(searchTerm.ToUpper()) Or body.Name.ToUpper().Contains("SUPPRESS") Then
+            body.Visible = False
+            count += 1
+        End If
+    Next
+
+    ' Update the document
+    odoc.Update()
+
+    MessageBox.Show("Visibility turned off for " & count & " solid(s) containing '" & searchTerm & "' or 'SUPPRESS'.", "Operation Complete")
+End Sub

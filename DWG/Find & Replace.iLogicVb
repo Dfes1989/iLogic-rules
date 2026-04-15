@@ -1,0 +1,103 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main
+	If ThisDoc.Document.DocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then Return
+	Dim oDDoc As DrawingDocument = ThisDoc.Document
+	Dim oSheet As Inventor.Sheet = oDDoc.ActiveSheet
+	'<<< set initial values to 'shared' variables >>>
+	oDNotes = oSheet.DrawingNotes
+	oTO = ThisApplication.TransientObjects
+	oHLS = oDDoc.CreateHighlightSet
+	oHLS.Color = oTO.CreateColor(255, 0, 0, 1) 'Red - Opaque
+	oFoundDNotesColl = oTO.CreateObjectCollection
+	sFind = ""
+	sNew = ""
+	'<<< done setting initial values >>>
+	'<<< following is a designated marker for a place to jump to later (using GoTo) >>>
+	StartOfRepeat :
+	'<<< all following code may repeat, so clear the 3 collections >>>
+	oHLS.Clear
+	oFoundDNotesColl.Clear
+	'<<< get required inputs from user  - exit if nothing entered >>>
+	sFind = InputBox("Enter Text To Find.", "Text To Find", "")
+	If sFind = "" Then Return
+	sNew = InputBox("Enter Replacement Text.", "Replacement Text", "")
+	If sNew = "" Then Return
+	'<<< conduct searches >>>
+	'runs the Sub routine defined below Sub Main...End Sub block
+	FindReplace(False) 'False means SearchOnly, no Replace
+	'<<< inspect findings, react appropriately >>>
+	If oHLS.Count > 0 Then
+		Dim oAns As DialogResult = MessageBox.Show("The highlighted notes contained the text to search for." _
+		& vbCrLf & "Do you want to proceed with the replacements? [YES]" _
+		& vbCrLf & "Or do you want to remove some of the highlighted objects from the edit group? [NO]" _
+		& vbCrLf & "Or do you want to cancel these edits? [CANCEL]", "Matching Notes Found", _
+		MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
+		If oAns = DialogResult.Cancel Then
+			GoTo MaybeFinished 'jump to specified location within code
+		ElseIf oAns = DialogResult.Yes Then
+			'loop back through them and replace the text (simple)
+			'runs the Sub routine defined below Sub Main...End Sub block
+			FindReplace(True) 'True means do Replace process
+		ElseIf oAns = DialogResult.No Then
+			'allow user to manually select ones they want to remove from editing
+			'then replace the text in the remaining ones (complex)
+			RemoveSelectedFromEditGroup 'runs Sub for selecting notes to remove from edit group
+			FindReplace(True) 'True means do Replace process
+		End If
+	End If
+	'<<< following is another marker for a location to jump to (using GoTo) >>>
+	MaybeFinished :
+	Dim oAgain As DialogResult = MessageBox.Show("Change Search Terms And Go Again? [YES]" _
+	& vbCrLf & "Or Exit This Rule? [NO]", "Repeat Rule Process?", MessageBoxButtons.YesNo, _
+	MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
+	If oAgain = DialogResult.Yes Then GoTo StartOfRepeat 'jump to specified location within code
+End Sub
+
+'declare variables here that all routines will need access to
+Dim oDNotes As Inventor.DrawingNotes
+Dim oTO As TransientObjects
+Dim oHLS As Inventor.HighlightSet
+Dim oFoundDNotesColl As ObjectCollection
+Dim sFind As String
+Dim sNew As String
+
+Sub FindReplace(ByVal bReplace As Boolean)
+	If bReplace = False Then
+		If oDNotes.Count > 0 Then
+			oFoundDNotesColl.Clear
+			For Each oDNote As Inventor.DrawingNote In oDNotes
+				If oDNote.FormattedText.Contains(sFind) Then
+					oFoundDNotesColl.Add(oDNote)
+				End If
+			Next 'oGNote
+			oHLS.Clear
+			Try : oHLS.AddMultipleItems(oFoundDNotesColl) : Catch : End Try
+		End If
+	Else 'bReplace = True
+		If oFoundDNotesColl.Count > 0 Then
+			For Each oDNote As Inventor.DrawingNote In oFoundDNotesColl
+				Try : oDNote.FormattedText = oDNote.FormattedText.Replace(sFind, sNew) : Catch : End Try
+				Try : oFoundDNotesColl.RemoveByObject(oDNote) : Catch : End Try
+				Try : oHLS.Remove(oDNote) : Catch : End Try
+			Next 'oGNote
+		End If
+	End If
+End Sub
+
+Sub RemoveSelectedFromEditGroup()
+	Dim oSelDNote As DrawingNote = Nothing
+	Dim oFilter As SelectionFilterEnum = SelectionFilterEnum.kDrawingNoteFilter
+	Dim sPrompt As String = "Select Note To Remove From Edit Group." _
+	& vbCrLf & "To exit selection mode, tap the Escape keyboard key."
+	Do
+		oSelDNote = Nothing
+		oSelDNote = ThisApplication.CommandManager.Pick(oFilter, sPrompt)
+		If oSelDNote Is Nothing Then Exit Do
+		If oFoundDNotesColl.Count > 0 Then
+			For Each oDNote As DrawingNote In oFoundDNotesColl
+				If oDNote Is oSelDNote Then oFoundDNotesColl.RemoveByObject(oDNote)
+			Next
+			Try : oHLS.Clear : oHLS.AddMultipleItems(oFoundDNotesColl) : Catch : End Try
+		End If
+	Loop Until oSelDNote Is Nothing
+End Sub

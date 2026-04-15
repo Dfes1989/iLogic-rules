@@ -1,0 +1,35 @@
+﻿Sub Main()
+    Dim oDoc As DrawingDocument
+    oDoc = ThisApplication.ActiveDocument
+
+    ' Loop through every sheet in the drawing
+    For Each oSheet As Sheet In oDoc.Sheets
+        For Each oView As DrawingView In oSheet.DrawingViews
+            ' Only assembly docs have design view representations
+            If oView.ReferencedDocumentDescriptor.ReferencedDocumentType = DocumentTypeEnum.kAssemblyDocumentObject Then
+                Dim asmDoc As AssemblyDocument = oView.ReferencedDocumentDescriptor.ReferencedDocument
+                Dim repMgr As DesignViewRepresentations = asmDoc.ComponentDefinition.RepresentationsManager.DesignViewRepresentations
+
+                ' Check if "Default" exists by looping
+                Dim repExists As Boolean = False
+                For Each rep As DesignViewRepresentation In repMgr
+                    If rep.Name = "Default" Then
+                        repExists = True
+                        Exit For
+                    End If
+                Next
+
+                ' Apply if found
+                If repExists Then
+                    Try
+                        oView.SetDesignViewRepresentation("Default", True)
+                    Catch ex As Exception
+                        ' Some views can’t accept rep changes – ignore
+                    End Try
+                End If
+            End If
+        Next
+    Next
+	
+    MessageBox.Show("Default design view applied to all views on ALL sheets (associative).", "Operation Complete")
+End Sub

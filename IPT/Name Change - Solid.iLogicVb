@@ -1,0 +1,28 @@
+﻿Dim SB As SurfaceBody
+Dim Doc As PartDocument = ThisDoc.Document
+Dim SBs As SurfaceBodies = Doc.ComponentDefinition.SurfaceBodies
+
+' Ask the user for the base name for renaming solid bodies
+Dim BaseName As String
+BaseName = InputBox("Enter the base name for renaming solid bodies:", "Solid Body Rename")
+
+' Check if the user entered a valid name
+If BaseName = "" Then
+    MessageBox.Show("No name entered. Operation cancelled.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error)
+    Exit Sub
+End If
+
+Dim Suffix As Integer = 1
+
+' Loop through all solid bodies, renaming them
+For Each SB In SBs
+    ' Check if the solid body name contains "SUPPRESS" or "Void"
+    If Not (SB.Name.Contains("SUPPRESS") Or SB.Name.Contains("Void")) Then
+        ' Rename the solid body using the user-defined base name
+        SB.Name = BaseName & CStr(Suffix).PadLeft _
+        (Len(CStr(Doc.ComponentDefinition.SurfaceBodies.Count)), "0")
+        Suffix += 1
+    End If
+Next
+
+MessageBox.Show("Solid body renaming completed successfully!", "Operation Complete", MessageBoxButtons.OK, MessageBoxIcon.Information)

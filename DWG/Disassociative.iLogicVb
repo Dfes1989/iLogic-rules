@@ -1,0 +1,41 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    Dim oDoc As DrawingDocument
+    oDoc = ThisApplication.ActiveDocument
+
+    ' Get the active sheet only
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+
+    ' Loop through views on the current sheet
+    For Each oView As DrawingView In oSheet.DrawingViews
+        ' Only assembly views have design view representations
+        If oView.ReferencedDocumentDescriptor.ReferencedDocumentType = DocumentTypeEnum.kAssemblyDocumentObject Then
+            Dim asmDoc As AssemblyDocument = oView.ReferencedDocumentDescriptor.ReferencedDocument
+            Dim repMgr As DesignViewRepresentations = asmDoc.ComponentDefinition.RepresentationsManager.DesignViewRepresentations
+
+            ' Check manually if "Default" exists
+            Dim repExists As Boolean = False
+            For Each rep As DesignViewRepresentation In repMgr
+                If rep.Name = "Default" Then
+                    repExists = True
+                    Exit For
+                End If
+            Next
+
+            ' Apply "Default" representation if found
+            If repExists Then
+                Try
+                    ' Apply Default, NON-associative
+                    oView.SetDesignViewRepresentation("Default", False)
+                Catch ex As Exception
+                    ' Ignore if the rep cannot be applied to this view
+                End Try
+            End If
+        End If
+    Next
+
+    ' Update the sheet to show changes
+    oDoc.Update()
+
+    MessageBox.Show("Default design view applied to all views on the active sheet (non-associative).", "Operation Complete")
+End Sub

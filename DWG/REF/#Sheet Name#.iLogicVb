@@ -1,0 +1,37 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+
+    For Each oSheet As Sheet In oDoc.Sheets
+        ' Activate the sheet
+        oSheet.Activate()
+
+        ' Wait briefly to allow UI to switch (optional but helps in UI lag situations)
+        Call System.Threading.Thread.Sleep(250)
+
+         ' Ensure the active document is a drawing
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then
+        MessageBox.Show("This rule must be run from a drawing document.", "Error")
+        Exit Sub
+    End If
+
+    ' Zoom to fit the active sheet in the view
+    ThisApplication.ActiveView.Fit()
+    ThisApplication.ActiveView.Update()
+
+        ' Prompt for new sheet name
+        Dim newName As String
+        newName = InputBox("Enter a new name for sheet '" & oSheet.Name & "':", "Rename Sheet", oSheet.Name)
+
+        ' Apply new name if valid
+        If newName <> "" And newName <> oSheet.Name Then
+            On Error Resume Next
+            oSheet.Name = newName
+            If Err.Number <> 0 Then
+                MessageBox.Show("Could not rename sheet '" & oSheet.Name & "' to '" & newName & "'.", "Rename Error")
+                Err.Clear()
+            End If
+            On Error GoTo 0
+        End If
+    Next
+End Sub

@@ -1,0 +1,37 @@
+﻿Imports Inventor
+Imports Microsoft.VisualBasic
+Imports System.Windows.Forms
+
+Sub Main()
+    ' Ensure a Part is active
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kPartDocumentObject Then
+        MessageBox.Show("Open a Part document first.", "Wrong Document Type")
+        Return
+    End If
+
+    Dim oDoc As PartDocument = ThisApplication.ActiveDocument
+    Dim oDef As PartComponentDefinition = oDoc.ComponentDefinition
+    Dim oBodies As SurfaceBodies = oDef.SurfaceBodies
+
+    ' Ask user what text to find
+    Dim textToFind As String = InputBox("Enter the text you want to replace in body names:", "Find Text", "")
+    If textToFind = "" Then
+        MessageBox.Show("No text entered. Rule cancelled.", "Cancelled")
+        Return
+    End If
+
+    ' Ask user what to replace it with
+    Dim textToReplace As String = InputBox("Enter the replacement text:", "Replace With", "")
+
+    Dim changedCount As Integer = 0
+
+    For Each oBody As SurfaceBody In oBodies
+        If oBody.Name.Contains(textToFind) Then
+            oBody.Name = oBody.Name.Replace(textToFind, textToReplace)
+            changedCount += 1
+        End If
+    Next
+
+    oDoc.Update()
+    MessageBox.Show(changedCount.ToString() & " body names updated.", "Done")
+End Sub

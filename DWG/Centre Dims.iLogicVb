@@ -1,0 +1,34 @@
+﻿Sub Main()
+
+    ' Ensure drawing document
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then
+        MessageBox.Show("Run this rule in a Drawing document.", "Invalid Document")
+        Exit Sub
+    End If
+
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+
+    Dim changedCount As Integer = 0
+
+    ' Loop through all general dimensions
+    For Each oDim As GeneralDimension In oSheet.DrawingDimensions.GeneralDimensions
+
+        Try
+            ' Only apply to linear dimensions
+            If TypeOf oDim Is LinearGeneralDimension Then
+                Dim oLinearDim As LinearGeneralDimension = oDim
+                oLinearDim.CenterText()
+                changedCount += 1
+            End If
+        Catch
+            ' Ignore dimensions that cannot be centered
+        End Try
+
+    Next
+
+    oDoc.Update()
+
+    MessageBox.Show(changedCount & " dimension(s) centered on active sheet.", "Done")
+
+End Sub

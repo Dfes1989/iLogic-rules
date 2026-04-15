@@ -1,0 +1,23 @@
+﻿Sub Main()
+    ' Get the active document
+    Dim odoc As PartDocument
+    odoc = ThisApplication.ActiveDocument
+
+    ' Get all solid bodies in the part
+    Dim solidBodies As SurfaceBodies
+    solidBodies = odoc.ComponentDefinition.SurfaceBodies
+
+    ' Loop through each solid body
+    For Each body As SurfaceBody In solidBodies
+        ' Check if the solid body name contains the word "Ref" (case-sensitive)
+        If (body.Name.Contains("Ref") Or body.Name.Contains("SUPPRESS")) Then
+            ' Turn off the visibility of the solid body
+            body.Visible = False
+        End If
+    Next
+
+    ' Update the document to reflect changes
+    odoc.Update()
+
+    MessageBox.Show("Visibility turned off for all solids containing 'Void' in their names.", "Operation Complete")
+End Sub

@@ -1,0 +1,56 @@
+﻿Sub main()
+    Dim odoc As PartDocument
+    odoc = ThisApplication.ActiveDocument
+
+    Dim sbs As Inventor.SurfaceBodies
+    sbs = odoc.ComponentDefinition.SurfaceBodies
+
+    ' Check if this is a multi-body part
+    If sbs.Count = 1 Then
+        MessageBox.Show("Error Occurred. This is not a Multi-Body Part")
+        Exit Sub
+    End If
+
+    ' Prompt user for suffix
+    Dim suffix As String
+    suffix = InputBox("Enter Suffix to Add to all visible Solids", "Solid Body Name Suffix")
+
+    Dim count As Integer
+    Dim osurf As Inventor.SurfaceBody
+    Dim newName, baseName As String
+    Dim testCount As Integer
+
+    count = sbs.Count
+
+    ' Iterate through all surface bodies
+    For i = 1 To count
+        osurf = odoc.ComponentDefinition.SurfaceBodies.Item(i)
+        
+        ' Process only solid bodies that are visible
+        If osurf.Volume(100) <> 0 And osurf.Visible = True Then
+            testCount = 1 ' Reset testCount for each body
+            baseName = osurf.Name ' Get the current name of the solid body
+            newName = baseName + suffix ' Add the suffix to the base name
+
+            ' Ensure the new name is unique
+            Dim isUnique As Boolean
+            Do
+                isUnique = True
+                For j = 1 To count
+                    If odoc.ComponentDefinition.SurfaceBodies.Item(j).Name = newName Then
+                        newName = baseName + suffix + "." + testCount.ToString
+                        testCount = testCount + 1
+                        isUnique = False
+                        Exit For
+                    End If
+                Next j
+            Loop Until isUnique
+
+            ' Assign the unique name to the solid body
+            osurf.Name = newName
+        End If
+    Next i
+
+    ' Save the document
+'    odoc.Save
+End Sub
