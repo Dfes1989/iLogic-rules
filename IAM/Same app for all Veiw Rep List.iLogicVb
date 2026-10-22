@@ -1,0 +1,112 @@
+﻿Imports Inventor
+Imports System.Windows.Forms
+
+Sub Main()
+    ' Ensure we are in an Assembly document
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kAssemblyDocumentObject Then
+        MessageBox.Show("Please open an Assembly document before running this rule.", "Wrong Document Type")
+        Return
+    End If
+
+    Dim oDoc As AssemblyDocument = ThisApplication.ActiveDocument
+    Dim oDef As AssemblyComponentDefinition = oDoc.ComponentDefinition
+    Dim reps As DesignViewRepresentations = oDef.RepresentationsManager.DesignViewRepresentations
+
+    ' Find Default
+    Dim defaultRep As DesignViewRepresentation = Nothing
+    For Each rep As DesignViewRepresentation In reps
+        If rep.Name = "Default" Then
+            defaultRep = rep
+            Exit For
+        End If
+    Next
+    If defaultRep Is Nothing Then
+        MessageBox.Show("No Design View Representation named 'Default' found.", "Not Found")
+        Return
+    End If
+
+    ' Build a form with a CheckedListBox
+    Dim Form As New Form()
+    Form.Text = "Select View Representations to Update"
+    Form.StartPosition = FormStartPosition.CenterScreen
+    Form.AutoSize = True
+    Form.AutoSizeMode = AutoSizeMode.GrowAndShrink
+
+    Dim clb As New CheckedListBox()
+    clb.Dock = DockStyle.Top
+    clb.Height = 200  ' Fixed height so scroll works if many reps
+
+    ' Add all reps except Default
+    For Each rep As DesignViewRepresentation In reps
+        If rep.Name <> "Default" Then
+            clb.Items.Add(rep.Name, True) ' default checked
+        End If
+    Next
+    Form.Controls.Add(clb)
+
+    ' OK button
+    Dim btnOk As New Button()
+    btnOk.Text = "OK"
+    btnOk.Dock = DockStyle.Bottom
+    AddHandler btnOk.Click, Sub(sender, e) Form.Close()
+    Form.Controls.Add(btnOk)
+
+    ' Show the form modally
+    Form.ShowDialog()
+
+    ' Collect selected reps
+    Dim targetReps As New List(Of String)
+    For i As Integer = 0 To clb.CheckedItems.Count - 1
+        targetReps.Add(clb.CheckedItems(i).ToString())
+    Next
+
+    If targetReps.Count = 0 Then
+        MessageBox.Show("No representations selected. Aborting.", "Canceled")
+        Return
+    End If
+
+    ' Activate Default to capture appearances
+    defaultRep.Activate()
+
+    ' Store appearances for each top-level occurrence
+    Dim occs As ComponentOccurrences = oDef.Occurrences
+    Dim occApps As New Dictionary(Of String, Object)
+
+    For Each occ As ComponentOccurrence In occs
+        Try
+            occApps(occ.Name) = occ.Appearance
+        Catch
+        End Try
+    Next
+
+    ' Apply stored appearances to selected reps
+    Dim repsProcessed As Integer = 0
+    Dim totalAssignments As Integer = 0
+
+    For Each rep As DesignViewRepresentation In reps
+        If targetReps.Contains(rep.Name) Then
+            Try
+                rep.Activate()
+                For Each occ As ComponentOccurrence In occs
+                    If occApps.ContainsKey(occ.Name) Then
+                        Try
+                            occ.Appearance = occApps(occ.Name)
+                            totalAssignments += 1
+                        Catch
+                        End Try
+                    End If
+                Next
+                oDoc.Update()
+                repsProcessed += 1
+            Catch
+            End Try
+        End If
+    Next
+
+    ' Return to Default
+    defaultRep.Activate()
+    oDoc.Update()
+
+    MessageBox.Show("Processed " & repsProcessed.ToString() & " representation(s)." & vbCrLf &
+                    "Total occurrence appearance assignments: " & totalAssignments.ToString(), "Done")
+End Sub

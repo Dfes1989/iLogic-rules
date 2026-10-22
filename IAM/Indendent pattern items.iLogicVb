@@ -1,0 +1,52 @@
+﻿Imports Inventor
+Imports System.Windows.Forms
+' iLogic rule: Make all assembly occurrence pattern elements independent
+' (Works in Inventor 2019+; uses OccurrencePatternElements and OccurrencePatternElement.Independent)
+
+Sub Main()
+    ' Ensure an assembly is active
+    If ThisApplication.ActiveDocument.DocumentType <> kAssemblyDocumentObject Then
+        MessageBox.Show("Please open an Assembly document before running this rule.", "Wrong Document Type")
+        Return
+    End If
+
+    Dim asmDoc As AssemblyDocument = ThisApplication.ActiveDocument
+    Dim asmDef As AssemblyComponentDefinition = asmDoc.ComponentDefinition
+    Dim occPatterns As OccurrencePatterns = asmDef.OccurrencePatterns
+
+    If occPatterns.Count = 0 Then
+        MessageBox.Show("No occurrence patterns found in this assembly.", "Nothing to do")
+        Return
+    End If
+
+    Dim changedCount As Integer = 0
+
+    For Each occPat As OccurrencePattern In occPatterns
+        ' Get the collection of elements for this pattern
+        Dim elems As OccurrencePatternElements = occPat.OccurrencePatternElements
+
+        For Each elem As OccurrencePatternElement In elems
+            Try
+                ' If not already independent, make it independent
+                If Not elem.Independent Then
+                    elem.Independent = True
+                    changedCount += 1
+                End If
+            Catch ex As Exception
+                ' Some elements cannot be made independent (seed element or nested restrictions).
+                ' Ignore and continue.
+            End Try
+        Next
+    Next
+
+    ' Update the document to apply changes
+    asmDoc.Update()
+
+    ' Inform the user
+    MessageBox.Show(changedCount.ToString() & " pattern elements set to Independent.", "Done")
+
+    ' Add warning message
+    MessageBox.Show("⚠ WARNING: All independent parts are now unconstrained and ungrounded." & vbCrLf & _
+                    "You may need to apply constraints or ground them manually.", "Important Notice", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+
+End Sub

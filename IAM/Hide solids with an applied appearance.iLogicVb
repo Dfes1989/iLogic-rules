@@ -1,0 +1,56 @@
+﻿Sub Main()
+    Dim oDoc As AssemblyDocument = TryCast(ThisApplication.ActiveDocument, AssemblyDocument)
+    If oDoc Is Nothing Then Return
+
+    ' Freeze screen for speed
+    ThisApplication.ScreenUpdating = False
+
+    Try
+        ' Process all leaf occurrences (the actual parts)
+        For Each oOcc As ComponentOccurrence In oDoc.ComponentDefinition.Occurrences.AllLeafOccurrences
+            
+            ' Skip suppressed or virtual components
+            If oOcc.Suppressed OrElse TypeOf oOcc.Definition Is VirtualComponentDefinition Then Continue For
+
+            ' 1. Check if the PART itself has a default appearance
+            ' 2. Then check the individual solid bodies inside that part
+            ProcessComponent(oOcc)
+        Next
+    Catch ex As Exception
+        ' Handle errors silently
+    Finally
+        ThisApplication.ScreenUpdating = True
+    End Try
+    
+    oDoc.Update()
+End Sub
+
+Sub ProcessComponent(oOcc As ComponentOccurrence)
+    Try
+        ' Get the appearance of the occurrence in the assembly
+        Dim occAppearance As Asset = oOcc.Appearance
+        
+        ' If the appearance name is NOT "Default", hide the whole occurrence
+        ' Note: Appearance names are language-specific. Use "As Material" or "Default"
+        If occAppearance.DisplayName <> "Default" AndAlso occAppearance.DisplayName <> "As Material" Then
+            oOcc.Visible = False
+            Return ' Skip internal body check if we already hid the whole part
+        End If
+
+        ' If the part is still visible, check if individual bodies have overrides
+        If oOcc.DefinitionDocumentType = DocumentTypeEnum.kPartDocumentObject Then
+            Dim oPartDef As PartComponentDefinition = oOcc.Definition
+            
+            For Each oBody As SurfaceBody In oPartDef.SurfaceBodies
+                ' If a body inside the part has a specific appearance override
+                If oBody.Appearance.DisplayName <> "Default" AndAlso oBody.Appearance.DisplayName <> "As Material" Then
+                    ' We hide the occurrence if any solid within it is "non-default"
+                    oOcc.Visible = False
+                    Exit For
+                End If
+            Next
+        End If
+    Catch
+        ' Skip library/locked parts
+    End Try
+End Sub

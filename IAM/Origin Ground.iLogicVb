@@ -1,0 +1,51 @@
+﻿Sub Main()
+    Dim oDoc As AssemblyDocument = TryCast(ThisApplication.ActiveDocument, AssemblyDocument)
+    If oDoc Is Nothing Then
+        MessageBox.Show("This rule must be run in an Assembly (.iam) file.", "iLogic")
+        Return
+    End If
+
+    ' 1. Access the current selection
+    Dim oSelectedSet As SelectSet = oDoc.SelectSet
+    If oSelectedSet.Count = 0 Then
+        MessageBox.Show("Please select the components you wish to ground first.", "Selection Empty")
+        Return
+    End If
+
+    ' 2. Define the Origin (Zero) Matrix
+    Dim oTG As TransientGeometry = ThisApplication.TransientGeometry
+    Dim oOriginMatrix As Matrix = oTG.CreateMatrix() 
+    ' An empty matrix defaults to 0,0,0 coordinates with no rotation
+
+    Dim count As Integer = 0
+
+    ' 3. Process each selected item
+    For Each oObj As Object In oSelectedSet
+        ' Ensure the selected object is a component occurrence
+        If TypeOf oObj Is ComponentOccurrence Then
+            Dim oOcc As ComponentOccurrence = DirectCast(oObj, ComponentOccurrence)
+            
+            Try
+                ' Un-ground it first to allow movement
+                oOcc.Grounded = False
+                
+                ' Snap the component's origin to the assembly's origin
+                oOcc.Transformation = oOriginMatrix
+                
+                ' Set to Grounded
+                oOcc.Grounded = True
+                
+                count += 1
+            Catch ex As Exception
+                ' Handle locked or read-only components
+            End Try
+        End If
+    Next
+
+    If count > 0 Then
+        oDoc.Update()
+        StatusBarText = count & " components snapped and grounded to origin."
+    Else
+        MessageBox.Show("No valid components were found in the selection.", "Done")
+    End If
+End Sub

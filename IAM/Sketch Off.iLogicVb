@@ -1,0 +1,53 @@
+﻿Sub Main()
+    Dim oDoc As AssemblyDocument = TryCast(ThisApplication.ActiveDocument, AssemblyDocument)
+    If oDoc Is Nothing Then
+        MessageBox.Show("Please run this in an Assembly (.iam) file.", "iLogic")
+        Return
+    End If
+
+    ' 1. Hide sketches in the top-level Assembly itself
+    HideSketchesInDoc(oDoc)
+
+    ' 2. Loop through every unique file referenced in this assembly
+    For Each oSubDoc As Document In oDoc.AllReferencedDocuments
+        ' Only process Parts and Sub-Assemblies
+        If oSubDoc.DocumentType = DocumentTypeEnum.kPartDocumentObject Or _
+           oSubDoc.DocumentType = DocumentTypeEnum.kAssemblyDocumentObject Then
+            
+            HideSketchesInDoc(oSubDoc)
+        End If
+    Next
+
+    oDoc.Update()
+    MessageBox.Show("All sketches in the assembly and its components have been hidden.", "Deep Clean Complete")
+End Sub
+
+''' <summary>
+''' Sub-routine to handle the actual hiding logic for any document type
+''' </summary>
+Sub HideSketchesInDoc(ByVal oDoc As Document)
+    Try
+        Dim oDef As ComponentDefinition = Nothing
+        
+        ' Determine if it's a Part or Assembly to get the Definition
+        If oDoc.DocumentType = DocumentTypeEnum.kPartDocumentObject Then
+            oDef = DirectCast(oDoc, PartDocument).ComponentDefinition
+        ElseIf oDoc.DocumentType = DocumentTypeEnum.kAssemblyDocumentObject Then
+            oDef = DirectCast(oDoc, AssemblyDocument).ComponentDefinition
+        End If
+
+        If oDef Is Nothing Then Return
+
+        ' Hide 2D Sketches
+        For Each oSketch As PlanarSketch In oDef.Sketches
+            If oSketch.Visible Then oSketch.Visible = False
+        Next
+
+        ' Hide 3D Sketches
+        For Each oSketch3D As Sketch3D In oDef.Sketches3D
+            If oSketch3D.Visible Then oSketch3D.Visible = False
+        Next
+    Catch
+        ' Skip files that are read-only or Library parts (Content Center)
+    End Try
+End Sub
