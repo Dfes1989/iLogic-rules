@@ -1,0 +1,66 @@
+﻿Imports System.Collections.Generic
+
+Sub Main()
+    Dim oDoc As PartDocument = TryCast(ThisApplication.ActiveDocument, PartDocument)
+    If oDoc Is Nothing Then Return
+
+    ' 1. Check for multi-body at the start
+    Dim oBodies As SurfaceBodies = oDoc.ComponentDefinition.SurfaceBodies
+    If oBodies.Count < 2 Then
+        MessageBox.Show("This is not a Multi-Body Part.", "iLogic")
+        Return
+    End If
+
+    ' 2. Prompt for suffix (Cancel check included)
+    Dim suffix As String = InputBox("Enter Suffix for ALL INVISIBLE solids:", "Solid Body Name Suffix", "-OLD")
+    If String.IsNullOrEmpty(suffix) Then Return
+
+    ' FREEZE UI for extra performance
+    ThisApplication.ScreenUpdating = False
+
+    Try
+        ' 3. RAM CACHE: Load all current body names into a HashSet
+        ' This makes the uniqueness check nearly instant
+        Dim nameCache As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        For Each oBody As SurfaceBody In oBodies
+            nameCache.Add(oBody.Name)
+        Next
+
+        Dim changedCount As Integer = 0
+
+        ' 4. Process only invisible solids
+        For Each oBody As SurfaceBody In oBodies
+            ' Use .IsSolid (instant) instead of .Volume (slow math)
+            If oBody.IsSolid AndAlso Not oBody.Visible Then
+                
+                Dim baseName As String = oBody.Name
+                Dim newName As String = baseName & suffix
+                
+                ' Check uniqueness against RAM instead of Inventor API
+                If nameCache.Contains(newName) Then
+                    Dim testCount As Integer = 1
+                    Dim tempName As String = newName
+                    Do While nameCache.Contains(tempName)
+                        tempName = newName & "." & testCount.ToString()
+                        testCount += 1
+                    Loop
+                    newName = tempName
+                End If
+
+                ' Rename and update the RAM cache
+                oBody.Name = newName
+                nameCache.Add(newName)
+                changedCount += 1
+            End If
+        Next
+
+        If changedCount > 0 Then oDoc.Update()
+        StatusBarText = changedCount & " invisible bodies renamed."
+
+    Catch ex As Exception
+        MessageBox.Show("Error: " & ex.Message)
+    Finally
+        ' Always turn screen back on
+        ThisApplication.ScreenUpdating = True
+    End Try
+End Sub

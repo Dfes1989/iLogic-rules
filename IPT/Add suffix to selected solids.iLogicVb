@@ -1,0 +1,63 @@
+﻿Sub Main()
+    ' Ensure we are in a Part document
+    Dim oDoc As PartDocument = TryCast(ThisApplication.ActiveDocument, PartDocument)
+    If oDoc Is Nothing Then
+        MessageBox.Show("This rule only works in Part (.ipt) files.", "iLogic")
+        Return
+    End If
+
+    ' Get the selection set
+    Dim oSelectedSet As SelectSet = oDoc.SelectSet
+    If oSelectedSet.Count = 0 Then
+        MessageBox.Show("Please select one or more Solid Bodies in the browser or graphics window first.", "Selection Empty")
+        Return
+    End If
+
+    ' Prompt user for suffix
+    Dim suffix As String = InputBox("Enter Suffix to add to selected bodies:", "Add Suffix", " - Void")
+    If String.IsNullOrEmpty(suffix) Then Return
+
+    Dim changedCount As Integer = 0
+    Dim allBodies As SurfaceBodies = oDoc.ComponentDefinition.SurfaceBodies
+
+    ' Process only what is currently selected
+    For Each oObj As Object In oSelectedSet
+        ' Verify the selected object is actually a SurfaceBody
+        If TypeOf oObj Is SurfaceBody Then
+            Dim oBody As SurfaceBody = DirectCast(oObj, SurfaceBody)
+            
+            ' Only process if it is a solid (not a construction surface)
+            If oBody.IsSolid Then
+                Dim baseName As String = oBody.Name
+                Dim newName As String = baseName & suffix
+                
+                ' Check for uniqueness within the entire part
+                Dim testCount As Integer = 1
+                Dim isUnique As Boolean = False
+                
+                Do
+                    isUnique = True
+                    For Each oCheck As SurfaceBody In allBodies
+                        If oCheck.Name = newName Then
+                            newName = baseName & suffix & "." & testCount.ToString()
+                            testCount += 1
+                            isUnique = False
+                            Exit For
+                        End If
+                    Next
+                Loop Until isUnique
+
+                ' Rename the body
+                oBody.Name = newName
+                changedCount += 1
+            End If
+        End If
+    Next
+
+    If changedCount > 0 Then
+        oDoc.Update()
+        StatusBarText = changedCount & " bodies renamed."
+    Else
+        MessageBox.Show("No valid solid bodies were found in your selection.", "Done")
+    End If
+End Sub

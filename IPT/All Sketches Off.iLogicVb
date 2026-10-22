@@ -1,0 +1,36 @@
+﻿Sub Main()
+    ' Ensure we are in a Part document
+    Dim oDoc As PartDocument = TryCast(ThisApplication.ActiveDocument, PartDocument)
+    If oDoc Is Nothing Then
+        MessageBox.Show("This rule only works in .ipt (Part) files.", "iLogic")
+        Return
+    End If
+
+    Dim oDef As PartComponentDefinition = oDoc.ComponentDefinition
+    Dim count As Integer = 0
+
+    ' 1. Loop through all 2D Sketches
+    For Each oSketch As PlanarSketch In oDef.Sketches
+        If oSketch.Visible = True Then
+            oSketch.Visible = False
+            count += 1
+        End If
+    Next
+
+    ' 2. Loop through all 3D Sketches
+    For Each oSketch3D As Sketch3D In oDef.Sketches3D
+        If oSketch3D.Visible = True Then
+            oSketch3D.Visible = False
+            count += 1
+        End If
+    Next
+
+    ' Refresh the graphics
+    oDoc.Update()
+    
+    If count > 0 Then
+        StatusBarText = count & " sketches hidden."
+    Else
+        MessageBox.Show("No visible sketches found to hide.", "Done")
+    End If
+End Sub

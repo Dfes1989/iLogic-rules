@@ -1,0 +1,52 @@
+﻿' EOP Safety Guard
+' Warns user if features may have been deleted while EOP is rolled up
+
+Sub Main()
+
+    ' Ensure active document is a Part
+    Dim oDoc As PartDocument = TryCast(ThisApplication.ActiveDocument, PartDocument)
+    If oDoc Is Nothing Then Exit Sub
+
+    Dim oDef As PartComponentDefinition = oDoc.ComponentDefinition
+    Dim featureCount As Integer = oDef.Features.Count
+
+    ' Store feature count in document attribute
+    Dim attrSetName As String = "EOP_Guard"
+    Dim attrName As String = "LastFeatureCount"
+
+    Dim lastKnownCount As Integer = featureCount
+
+    ' Create attribute set if missing
+    Dim attrSet As AttributeSet
+
+    If oDoc.AttributeSets.NameIsUsed(attrSetName) Then
+        attrSet = oDoc.AttributeSets.Item(attrSetName)
+
+        If attrSet.NameIsUsed(attrName) Then
+            lastKnownCount = attrSet.Item(attrName).Value
+        End If
+    Else
+        attrSet = oDoc.AttributeSets.Add(attrSetName)
+    End If
+
+    ' Detect possible feature deletion
+    If featureCount < lastKnownCount Then
+
+        MessageBox.Show( _
+            "WARNING: The feature count has decreased." & vbCrLf & vbCrLf & _
+            "This may mean features were deleted while the EOP marker was rolled up." & vbCrLf & vbCrLf & _
+            "If accidental, press Ctrl+Z immediately.", _
+            "EOP Safety Guard", _
+            MessageBoxButtons.OK, _
+            MessageBoxIcon.Exclamation)
+
+    End If
+
+    ' Save latest feature count
+    If attrSet.NameIsUsed(attrName) Then
+        attrSet.Item(attrName).Value = featureCount
+    Else
+        attrSet.Add(attrName, ValueTypeEnum.kIntegerType, featureCount)
+    End If
+
+End Sub

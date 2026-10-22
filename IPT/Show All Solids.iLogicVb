@@ -1,0 +1,32 @@
+﻿' Safety Check
+If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kPartDocumentObject Then
+    MessageBox.Show("This rule can only be run in a Part file.", "Wrong Document Type")
+    Return
+End If
+
+Dim doc As PartDocument = ThisApplication.ActiveDocument
+Dim compDef As PartComponentDefinition = doc.ComponentDefinition
+
+' 1. Start a single "Transaction" to group all actions into ONE Undo step
+Dim oTransMgr As TransactionManager = ThisApplication.TransactionManager
+Dim oTrans As Transaction = oTransMgr.StartTransaction(doc, "Show All Solid Bodies")
+
+Try
+    ' 2. Loop through bodies, but only process ones that are actually hidden to save time
+    For Each body As SurfaceBody In compDef.SurfaceBodies
+        If Not body.Visible Then
+            body.Visible = True
+        End If
+    Next
+    
+    ' 3. Close the transaction (this pushes the single step to the Undo menu)
+    oTrans.End()
+    
+Catch ex As Exception
+    ' If something breaks, abort the transaction so we don't mess up the file
+    oTrans.Abort()
+    MessageBox.Show("An error occurred: " & ex.Message, "Error")
+End Try
+
+' 4. Update the screen once at the very end
+ThisApplication.ActiveView.Update()
