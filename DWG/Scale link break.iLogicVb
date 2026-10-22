@@ -1,0 +1,28 @@
+﻿Sub Main()
+    Dim oDoc As DrawingDocument = TryCast(ThisApplication.ActiveDocument, DrawingDocument)
+    If oDoc Is Nothing Then Return
+
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+    Dim count As Integer = 0
+
+    ' Loop through every view on the current active sheet
+    For Each oView As DrawingView In oSheet.DrawingViews
+        ' Check if the view is currently linked to a base view
+        If oView.ScaleFromBase = True Then
+            Try
+                ' Break the link
+                oView.ScaleFromBase = False
+                count += 1
+            Catch
+                ' Skip views that are locked or special cases
+            End Try
+        End If
+    Next
+
+    If count > 0 Then
+        oDoc.Update()
+        StatusBarText = count & " view scale links broken."
+    Else
+        MessageBox.Show("No linked view scales found on this sheet.", "iLogic")
+    End If
+End Sub

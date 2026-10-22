@@ -1,0 +1,47 @@
+﻿Dim ScaleInput As String
+
+ScaleInput = InputBox( _
+"Enter scale." & vbCrLf & _
+"Examples:" & vbCrLf & _
+"1:2" & vbCrLf & _
+"1:5" & vbCrLf & _
+"2:1", _
+"Drawing Scale", _
+"1:2")
+
+If ScaleInput = "" Then Return
+
+Dim Parts() As String
+Parts = Split(ScaleInput, ":")
+
+If UBound(Parts) <> 1 Then
+    MsgBox("Invalid format. Use format like 1:2 or 2:1")
+    Return
+End If
+
+Dim ScaleValue As Double
+
+ScaleValue = CDbl(Parts(0)) / CDbl(Parts(1))
+
+
+Dim oSheet As Sheet
+oSheet = ThisApplication.ActiveDocument.ActiveSheet
+
+Dim Changed As Integer = 0
+Dim Skipped As Integer = 0
+
+For Each oView As DrawingView In oSheet.DrawingViews
+
+    Try
+        oView.Scale = ScaleValue
+        Changed = Changed + 1
+    Catch
+        Skipped = Skipped + 1
+    End Try
+
+Next
+
+InventorVb.DocumentUpdate()
+
+MsgBox("Updated: " & Changed & vbCrLf & _
+       "Skipped: " & Skipped)

@@ -1,0 +1,146 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then Return
+    Dim oDDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDDoc.ActiveSheet
+	
+	Try
+        Dim oCam As Camera = ThisApplication.ActiveView.Camera
+        oCam.Fit()
+        oCam.Apply()
+    Catch
+    End Try
+    
+    '<<< set initial values to 'shared' variables >>>
+    oViews = oSheet.DrawingViews
+    oTO = ThisApplication.TransientObjects
+    oHLS = oDDoc.CreateHighlightSet
+    oHLS.Color = oTO.CreateColor(255, 0, 0, 1) 'Red - Opaque
+    oFoundViewsColl = oTO.CreateObjectCollection
+    sFind = ""
+    sNew = ""
+    
+    StartOfRepeat:
+    oHLS.Clear
+    oFoundViewsColl.Clear
+    
+    '<<< get required inputs from user >>>
+    sFind = InputBox("Enter View Name/Label Text To Find.", "Text To Find", "")
+    If sFind = "" Then Return
+    sNew = InputBox("Enter Replacement Text.", "Replacement Text", "")
+    If sNew = "" Then Return
+    
+    '<<< conduct searches >>>
+    FindReplace(False) 'SearchOnly, no Replace yet
+    
+Try
+        oSheet.ClientView.Fit()
+    Catch
+        ' Fallback if it ever fails
+    End Try
+	
+    '<<< inspect findings, react appropriately >>>
+    If oHLS.Count > 0 Then
+        Dim oAns As DialogResult = MessageBox.Show("The highlighted views contained the text to search for." _
+        & vbCrLf & "Do you want to proceed with the replacements? [YES]" _
+        & vbCrLf & "Or do you want to remove some of the highlighted views from the edit group? [NO]" _
+        & vbCrLf & "Or do you want to cancel these edits? [CANCEL]", "Matching Labels Found", _
+        MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
+        
+        If oAns = DialogResult.Cancel Then
+            GoTo MaybeFinished 
+        ElseIf oAns = DialogResult.Yes Then
+            FindReplace(True) 'Do Replace
+        ElseIf oAns = DialogResult.No Then
+            RemoveSelectedFromEditGroup() 
+            FindReplace(True) 'Do Replace on remaining
+        End If
+    Else
+        MessageBox.Show("No matching text found in any View Names or Labels on this sheet.", "No Matches")
+    End If
+    
+    MaybeFinished:
+    Dim oAgain As DialogResult = MessageBox.Show("Change Search Terms And Go Again? [YES]" _
+    & vbCrLf & "Or Exit This Rule? [NO]", "Repeat Rule Process?", MessageBoxButtons.YesNo, _
+    MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
+    
+    If oAgain = DialogResult.Yes Then GoTo StartOfRepeat
+End Sub
+
+' --- SHARED VARIABLES ---
+Dim oViews As DrawingViews
+Dim oTO As TransientObjects
+Dim oHLS As HighlightSet
+Dim oFoundViewsColl As ObjectCollection
+Dim sFind As String
+Dim sNew As String
+
+Sub FindReplace(ByVal bReplace As Boolean)
+    If bReplace = False Then
+        If oViews.Count > 0 Then
+            oFoundViewsColl.Clear
+            For Each oView As DrawingView In oViews
+                If oView.ShowLabel Then
+                    ' Check BOTH the View Name and the Formatted Text
+                    Dim matchFound As Boolean = False
+                    If oView.Name.Contains(sFind) Then matchFound = True
+                    If oView.Label.FormattedText.Contains(sFind) Then matchFound = True
+                    
+                    If matchFound Then
+                        oFoundViewsColl.Add(oView)
+                    End If
+                End If
+            Next
+            
+            oHLS.Clear
+            ' THE FIX: Add items one by one safely
+            For Each oView As DrawingView In oFoundViewsColl
+                Try : oHLS.AddItem(oView) : Catch : End Try
+            Next
+            
+            ' THE FIX: Force the screen to redraw the highlights before the pop-up!
+            Try : ThisApplication.ActiveView.Update() : Catch : End Try
+            ThisApplication.UserInterfaceManager.DoEvents()
+        End If
+    Else 
+        If oFoundViewsColl.Count > 0 Then
+            For Each oView As DrawingView In oFoundViewsColl
+                If oView.Name.Contains(sFind) Then
+                    Try : oView.Name = oView.Name.Replace(sFind, sNew) : Catch : End Try
+                End If
+                If oView.Label.FormattedText.Contains(sFind) Then
+                    Try : oView.Label.FormattedText = oView.Label.FormattedText.Replace(sFind, sNew) : Catch : End Try
+                End If
+                
+                Try : oFoundViewsColl.RemoveByObject(oView) : Catch : End Try
+                Try : oHLS.Remove(oView) : Catch : End Try
+            Next 
+        End If
+    End If
+End Sub
+
+Sub RemoveSelectedFromEditGroup()
+    Dim oSelView As DrawingView = Nothing
+    Dim oFilter As SelectionFilterEnum = SelectionFilterEnum.kDrawingViewFilter
+    Dim sPrompt As String = "Select Drawing View To Remove From Edit Group. (Press ESC to finish)"
+    
+    Do
+        oSelView = Nothing
+        Try
+            oSelView = ThisApplication.CommandManager.Pick(oFilter, sPrompt)
+        Catch
+        End Try
+        
+        If oSelView Is Nothing Then Exit Do
+        
+        If oFoundViewsColl.Count > 0 Then
+            For Each oView As DrawingView In oFoundViewsColl
+                If oView Is oSelView Then 
+                    oFoundViewsColl.RemoveByObject(oView)
+                    ' Also remove the red highlight immediately when deselected
+                    Try : oHLS.Remove(oView) : Catch : End Try
+                End If
+            Next
+        End If
+    Loop Until oSelView Is Nothing
+End Sub

@@ -1,0 +1,36 @@
+﻿' Get the active drawing document
+Dim oDrawing As DrawingDocument
+oDrawing = ThisDoc.Document
+
+' Get the Revision Table on Sheet 1
+Dim oRevTable As RevisionTable
+
+' Ensure the sheet and revision table exist
+If oDrawing.Sheets.Count = 0 Then Return
+If oDrawing.Sheets(1).RevisionTables.Count = 0 Then Return
+
+oRevTable = oDrawing.Sheets(1).RevisionTables(1)
+
+' Check if the revision table has any rows
+Dim rowCount As Integer = oRevTable.RevisionTableRows.Count
+If rowCount = 0 Then Return
+
+' Get the most recent revision row (last one)
+Dim oLatestRow As RevisionTableRow = oRevTable.RevisionTableRows.Item(rowCount)
+
+' Get the Revision ID (assumed to be in column 1)
+Dim currentRev As String = Trim(oLatestRow.Item(1).Text)
+
+' Check if revision starts with "C" (case-sensitive)
+If currentRev.StartsWith("A")And currentRev <> ("AB") Then
+    ' Update the custom iProperty called "Status"
+	iProperties.Value("Status", "Status") = "Approval"
+ElseIf currentRev.StartsWith("C")And currentRev <> ("CO") Then
+    ' Update the custom iProperty called "Status"
+	iProperties.Value("Status", "Status") = "Construction"
+ElseIf currentRev=("CO") Then
+    ' Update the custom iProperty called "Status"
+    iProperties.Value("Status", "Status") = "Concept"
+ElseIf currentRev = "AB" Then
+	iProperties.Value("Status", "Status") = "AS BUILT"
+End If

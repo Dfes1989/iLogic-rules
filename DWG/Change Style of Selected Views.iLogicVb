@@ -1,0 +1,64 @@
+﻿Sub Main()
+    ' Ensure we are in a drawing
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then
+        MessageBox.Show("Please run this in a Drawing.", "Wrong Document Type")
+        Exit Sub
+    End If
+
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSelectSet As SelectSet = oDoc.SelectSet
+
+    ' 1. Check if the user has actually selected anything
+    If oSelectSet.Count = 0 Then
+        MessageBox.Show("Please select at least one drawing view first.", "No Views Selected")
+        Exit Sub
+    End If
+
+    ' 2. Filter the selection to only grab Drawing Views
+    Dim selectedViews As New List(Of DrawingView)
+    For Each obj As Object In oSelectSet
+        If TypeOf obj Is DrawingView Then
+            selectedViews.Add(DirectCast(obj, DrawingView))
+        End If
+    Next
+
+    If selectedViews.Count = 0 Then
+        MessageBox.Show("Please ensure you have selected a Drawing View.", "Invalid Selection")
+        Exit Sub
+    End If
+
+    ' 3. Create a list of the available style options
+    Dim styleOptions As New List(Of String)
+    styleOptions.Add("Hidden Line")
+    styleOptions.Add("Hidden Line Removed")
+    styleOptions.Add("Shaded")
+    styleOptions.Add("Shaded with Hidden Lines")
+
+    ' 4. Prompt the user with a dropdown menu
+    Dim chosenStyle As String = InputListBox("Select the display style for the selected views:", styleOptions, styleOptions(1), "Set View Style", "Available Styles")
+    
+    ' Exit if they hit Cancel
+    If String.IsNullOrEmpty(chosenStyle) Then Exit Sub
+
+    ' 5. Map the text selection to Inventor's internal API commands
+    Dim targetStyle As DrawingViewStyleEnum
+
+    Select Case chosenStyle
+        Case "Hidden Line"
+            targetStyle = DrawingViewStyleEnum.kHiddenLineDrawingViewStyle
+        Case "Hidden Line Removed"
+            targetStyle = DrawingViewStyleEnum.kHiddenLineRemovedDrawingViewStyle
+        Case "Shaded"
+            targetStyle = DrawingViewStyleEnum.kShadedDrawingViewStyle
+        Case "Shaded with Hidden Lines"
+            targetStyle = DrawingViewStyleEnum.kShadedHiddenLineDrawingViewStyle
+    End Select
+
+    ' 6. Apply the style directly to the selected views
+    For Each oView As DrawingView In selectedViews
+        oView.ViewStyle = targetStyle
+    Next
+    
+    ' Force the screen to redraw to show the changes immediately
+    oDoc.Update()
+End Sub

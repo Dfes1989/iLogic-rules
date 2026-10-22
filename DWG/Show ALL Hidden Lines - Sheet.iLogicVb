@@ -1,0 +1,32 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+    Dim i As Integer = 1
+
+    For Each oDrawView In oSheet.DrawingViews
+        Dim oView As DrawingView = oSheet.DrawingViews.Item(i)
+        
+        Try
+            Select Case oView.ViewStyle
+                
+                ' If it's Shaded with Hidden Lines REMOVED, switch to Shaded with Hidden Lines SHOWN
+                Case DrawingViewStyleEnum.kShadedDrawingViewStyle
+                    oView.ViewStyle = DrawingViewStyleEnum.kShadedHiddenLineDrawingViewStyle
+                
+                ' If it's standard Wireframe with Hidden Lines REMOVED, switch to Wireframe with Hidden Lines SHOWN
+                Case DrawingViewStyleEnum.kHiddenLineRemovedDrawingViewStyle
+                    oView.ViewStyle = DrawingViewStyleEnum.kHiddenLineDrawingViewStyle
+                    
+                ' If a view already has hidden lines shown (shaded or unshaded), it is safely left alone
+            End Select
+            
+        Catch
+            ' Safely skip any locked views
+        End Try
+        
+        i = i + 1
+    Next
+
+    oDoc.Update()
+End Sub

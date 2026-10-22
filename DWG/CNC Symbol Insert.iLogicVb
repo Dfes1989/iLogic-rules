@@ -1,0 +1,120 @@
+﻿Sub Main()
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then Return
+
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+
+' --- THE STYLE FIX ---
+    ' Search the drawing for your specific text style
+    Dim oTextStyle As TextStyle = Nothing
+    Try
+        oTextStyle = oDoc.StylesManager.TextStyles.Item("Text - Red")
+    Catch
+        ' If someone accidentally deletes the style, the script won't crash, it will just warn you.
+        MessageBox.Show("Could not find the text style 'Text - Red'." & vbCrLf & "Placing text using the default style instead.", "Style Missing")
+    End Try
+	
+	Dim oLayer As Layer = Nothing
+    Try
+        oLayer = oDoc.StylesManager.Layers.Item("#CNC labels") ' Replace with your exact layer name
+    Catch
+        ' Falls back gracefully if the layer doesn't exist
+    End Try
+	
+    ' 1. Ask for the starting number
+    Dim inputNum As String = InputBox("Enter the starting CNC number (e.g., 1):", "Starting Number", "1")
+    If String.IsNullOrWhiteSpace(inputNum) Then Exit Sub
+
+    Dim currentNum As Integer
+    If Not Integer.TryParse(inputNum, currentNum) Then
+        MessageBox.Show("Please enter a valid whole number.", "Invalid Input")
+        Exit Sub
+    End If
+
+    
+    ' ---------------------
+
+    Dim placedCount As Integer = 0
+    
+    ' 2. Initialize our custom 2D mouse listener
+    Dim picker As New PointPicker(ThisApplication)
+
+    ' 3. Loop until the user presses ESC
+    Do
+        Dim currentText As String = "CNC - " & currentNum
+
+        ' Look at the bottom left of your screen for the prompt
+        Dim pt As Point2d = picker.GetPoint("Click to place " & currentText & " (Press ESC to stop)")
+        
+        ' If pt is Nothing, it means you pressed ESC
+        If pt Is Nothing Then Exit Do
+
+        ' 4. Place the note exactly where you clicked
+        Try
+            Dim oNote As GeneralNote
+            oNote = oSheet.DrawingNotes.GeneralNotes.AddFitted(pt, currentText)
+            
+            ' Instantly apply your red text style!
+            If oTextStyle IsNot Nothing Then
+                oNote.TextStyle = oTextStyle
+				If oLayer IsNot Nothing Then
+                oNote.Layer = oLayer
+            End If
+            End If
+            
+            currentNum += 1
+            placedCount += 1
+        Catch ex As Exception
+            MessageBox.Show("Failed to place text: " & ex.Message, "Error")
+            Exit Do
+        End Try
+    Loop
+
+    If placedCount > 0 Then
+        MessageBox.Show("Successfully placed " & placedCount & " CNC notes.", "Done")
+    End If
+End Sub
+
+' ==============================================================================
+' CUSTOM 2D MOUSE PICKER CLASS
+' ==============================================================================
+Class PointPicker
+    Private oApp As Inventor.Application
+    Private WithEvents oInteractEvents As InteractionEvents
+    Private WithEvents oMouseEvents As MouseEvents
+    Private bDone As Boolean
+    Private pt As Point2d
+    
+    Public Sub New(ByVal app As Inventor.Application)
+        oApp = app
+    End Sub
+    
+    Public Function GetPoint(prompt As String) As Point2d
+        pt = Nothing
+        oInteractEvents = oApp.CommandManager.CreateInteractionEvents()
+        oInteractEvents.InteractionDisabled = False
+        oInteractEvents.StatusBarText = prompt 
+        oMouseEvents = oInteractEvents.MouseEvents
+        
+        bDone = False
+        oInteractEvents.Start()
+        
+        Do While Not bDone
+            oApp.UserInterfaceManager.DoEvents()
+        Loop
+        
+        oInteractEvents.Stop()
+        Return pt
+    End Function
+    
+    Private Sub oMouseEvents_OnMouseClick(MouseButton As MouseButtonEnum, ShiftKeys As ShiftStateEnum, ModelPosition As Point, ViewPosition As Point2d, View As Inventor.View) Handles oMouseEvents.OnMouseClick
+        If MouseButton = MouseButtonEnum.kLeftMouseButton Then
+            pt = oApp.TransientGeometry.CreatePoint2d(ModelPosition.X, ModelPosition.Y)
+            bDone = True
+        End If
+    End Sub
+    
+    Private Sub oInteractEvents_OnTerminate() Handles oInteractEvents.OnTerminate
+        bDone = True
+    End Sub
+End Class

@@ -1,0 +1,399 @@
+﻿Imports Inventor
+Imports System.Windows.Forms
+
+Sub Main()
+
+'===============================================================
+' THREADED HOLE ANALYSIS
+'
+' M4  = Orange
+' M6  = Yellow
+' M8  = Green
+' M10 = Blue
+'
+' Only actual Inventor Hole Features with:
+'
+'     HoleFeature.Tapped = True
+'
+' are analysed.
+'
+' External/modelled threads are ignored.
+'
+'===============================================================
+
+
+'---------------------------------------------------------------
+' CHECK ACTIVE DOCUMENT
+'---------------------------------------------------------------
+
+Dim oDoc As DrawingDocument
+
+If ThisApplication.ActiveDocument Is Nothing Then
+    MessageBox.Show("No active document.", "Threaded Hole Analysis")
+    Return
+End If
+
+If Not TypeOf ThisApplication.ActiveDocument Is DrawingDocument Then
+    MessageBox.Show("Please run this rule from a drawing.", "Threaded Hole Analysis")
+    Return
+End If
+
+oDoc = ThisApplication.ActiveDocument
+
+
+'---------------------------------------------------------------
+' SELECT DRAWING VIEW
+'---------------------------------------------------------------
+
+Dim oView As DrawingView = Nothing
+
+Try
+
+    oView = ThisApplication.CommandManager.Pick( _
+        SelectionFilterEnum.kDrawingViewFilter, _
+        "Select a drawing view")
+
+Catch
+
+    Return
+
+End Try
+
+If oView Is Nothing Then Return
+
+Dim oSheet As Sheet = oView.Parent
+
+
+'---------------------------------------------------------------
+' COLOURS
+'---------------------------------------------------------------
+
+Dim orangeColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(255, 165, 0)
+
+Dim yellowColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(235, 235, 0)
+
+Dim greenColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(0, 180, 0)
+
+Dim blueColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(0, 0, 255)
+
+
+'---------------------------------------------------------------
+' COUNTERS
+'---------------------------------------------------------------
+
+Dim countM4 As Integer = 0
+Dim countM6 As Integer = 0
+Dim countM8 As Integer = 0
+Dim countM10 As Integer = 0
+
+
+'---------------------------------------------------------------
+' GET REFERENCED DOCUMENT
+'---------------------------------------------------------------
+
+Dim oRefDoc As Document = Nothing
+
+Try
+
+    oRefDoc = oView.ReferencedDocumentDescriptor.ReferencedDocument
+
+Catch ex As Exception
+
+    MessageBox.Show( _
+        "Could not access the model referenced by drawing view '" & _
+        oView.Name & "'." & vbCrLf & vbCrLf & _
+        ex.Message, _
+        "Threaded Hole Analysis")
+
+    Return
+
+End Try
+
+
+'---------------------------------------------------------------
+' MAKE SURE REFERENCED DOCUMENT IS A PART
+'---------------------------------------------------------------
+
+If Not TypeOf oRefDoc Is PartDocument Then
+
+    MessageBox.Show( _
+        "The selected drawing view does not reference a Part document." & _
+        vbCrLf & vbCrLf & _
+        "Threaded Hole Analysis only checks Part documents.", _
+        "Threaded Hole Analysis")
+
+    Return
+
+End If
+
+
+Dim oPartDoc As PartDocument = DirectCast(oRefDoc, PartDocument)
+
+Dim oDef As PartComponentDefinition = _
+    oPartDoc.ComponentDefinition
+
+
+'---------------------------------------------------------------
+' GET HOLE FEATURES
+'---------------------------------------------------------------
+
+Dim oHoleFeatures As HoleFeatures = oDef.Features.HoleFeatures
+
+
+'---------------------------------------------------------------
+' ANALYSE HOLE FEATURES
+'---------------------------------------------------------------
+
+For Each oHole As HoleFeature In oHoleFeatures
+
+    Try
+
+        '-------------------------------------------------------
+        ' ONLY TAPPED HOLES
+        '-------------------------------------------------------
+
+        If oHole.Tapped = True Then
+
+            Dim oTapInfo As HoleTapInfo = oHole.TapInfo
+
+            Dim nominalSize As String = ""
+
+            Try
+                nominalSize = _
+                    oTapInfo.NominalSize.ToString().Trim().ToUpper()
+            Catch
+                nominalSize = ""
+            End Try
+
+
+            '---------------------------------------------------
+            ' DRAWING CURVES ASSOCIATED WITH THIS HOLE FEATURE
+            '---------------------------------------------------
+
+            Dim oHoleCurves As DrawingCurvesEnumerator = Nothing
+
+            Try
+
+                oHoleCurves = oView.DrawingCurves(oHole)
+
+            Catch
+
+                oHoleCurves = Nothing
+
+            End Try
+
+
+            If oHoleCurves Is Nothing Then
+                Continue For
+            End If
+
+
+            If oHoleCurves.Count = 0 Then
+                Continue For
+            End If
+
+
+            '---------------------------------------------------
+            ' M4
+            '
+            ' NominalSize returns:
+            '     "4"
+            '
+            ' ThreadDesignation would be:
+            '     "M4x0.7"
+            '---------------------------------------------------
+
+            If nominalSize = "4" Then
+
+                For Each oCurve As DrawingCurve In oHoleCurves
+
+                    oCurve.Color = orangeColor
+
+                Next
+
+                countM4 += 1
+
+
+            '---------------------------------------------------
+            ' M6
+            '---------------------------------------------------
+
+            ElseIf nominalSize = "6" Then
+
+                For Each oCurve As DrawingCurve In oHoleCurves
+
+                    oCurve.Color = yellowColor
+
+                Next
+
+                countM6 += 1
+
+
+            '---------------------------------------------------
+            ' M8
+            '---------------------------------------------------
+
+            ElseIf nominalSize = "8" Then
+
+                For Each oCurve As DrawingCurve In oHoleCurves
+
+                    oCurve.Color = greenColor
+
+                Next
+
+                countM8 += 1
+
+
+            '---------------------------------------------------
+            ' M10
+            '---------------------------------------------------
+
+            ElseIf nominalSize = "10" Then
+
+                For Each oCurve As DrawingCurve In oHoleCurves
+
+                    oCurve.Color = blueColor
+
+                Next
+
+                countM10 += 1
+
+            End If
+
+        End If
+
+    Catch
+
+        ' Ignore individual Hole Features which cannot be processed
+
+    End Try
+
+Next
+
+
+'===============================================================
+' TOTAL
+'===============================================================
+
+Dim totalThreads As Integer = _
+    countM4 + _
+    countM6 + _
+    countM8 + _
+    countM10
+
+
+'===============================================================
+' UPDATE DRAWING
+'===============================================================
+
+oDoc.Update()
+
+
+'===============================================================
+' REPORT
+'===============================================================
+
+Dim report As String = ""
+
+report &= "THREADED HOLE ANALYSIS" & vbCrLf
+report &= "----------------------" & vbCrLf
+report &= "Drawing View: " & oView.Name & vbCrLf
+report &= vbCrLf
+
+report &= "M4 - " & countM4 & vbCrLf
+report &= "M6 - " & countM6 & vbCrLf
+report &= "M8 - " & countM8 & vbCrLf
+report &= "M10 - " & countM10 & vbCrLf
+
+report &= vbCrLf
+report &= "------------------" & vbCrLf
+report &= "TOTAL THREADED HOLES: " & totalThreads
+
+
+'===============================================================
+' NO THREADED HOLES FOUND
+'===============================================================
+
+If totalThreads = 0 Then
+
+    MessageBox.Show( _
+        "No recognised threaded holes were found in drawing view '" & _
+        oView.Name & "'.", _
+        "Threaded Hole Analysis")
+
+    Return
+
+End If
+
+
+'===============================================================
+' COPY REPORT TO CLIPBOARD
+'===============================================================
+
+Try
+
+    My.Computer.Clipboard.SetText(report)
+
+Catch
+
+    ' Clipboard failure does not stop the rule
+
+End Try
+
+
+'===============================================================
+' SHOW REPORT / INSERT GENERAL NOTE
+'===============================================================
+
+Dim answer As DialogResult
+
+answer = MessageBox.Show( _
+    report & vbCrLf & vbCrLf & _
+    "YES = Insert report as General Note" & vbCrLf & _
+    "NO = Leave report on clipboard only" & vbCrLf & _
+    "CANCEL = Do not insert note", _
+    "Threaded Hole Analysis", _
+    MessageBoxButtons.YesNoCancel, _
+    MessageBoxIcon.Information)
+
+
+'===============================================================
+' INSERT GENERAL NOTE
+'===============================================================
+
+If answer = DialogResult.Yes Then
+
+    Try
+
+        Dim xPos As Double = oSheet.Width - -2.0
+        Dim yPos As Double = -2.0
+
+        Dim oTG As TransientGeometry = _
+            ThisApplication.TransientGeometry
+
+        Dim oPoint As Point2d = _
+            oTG.CreatePoint2d(xPos, yPos)
+
+        oSheet.DrawingNotes.GeneralNotes.AddFitted( _
+            oPoint, _
+            report)
+
+        oDoc.Update()
+
+    Catch ex As Exception
+
+        MessageBox.Show( _
+            "The threaded hole analysis was completed, but the General Note could not be inserted." & _
+            vbCrLf & vbCrLf & _
+            ex.Message, _
+            "Threaded Hole Analysis")
+
+    End Try
+
+End If
+
+End Sub

@@ -1,0 +1,216 @@
+﻿Imports Inventor
+Imports System.Collections.Generic
+Imports System.Windows.Forms
+
+Sub Main()
+    ' Ensure active document is a drawing
+    If ThisApplication.ActiveDocument.DocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then
+        MessageBox.Show("Please run this rule from a drawing document.", "Auto-Dimension Panels", MessageBoxButtons.OK, MessageBoxIcon.Warning)
+        Return
+    End If
+
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+    Dim oTG As TransientGeometry = ThisApplication.TransientGeometry
+
+        ' Use any views already selected (window/drag or Ctrl+click) before running the rule
+    Dim selectedViews As New List(Of DrawingView)
+
+    For Each obj As Object In oDoc.SelectSet
+        Dim v As DrawingView = TryCast(obj, DrawingView)
+        If v Is Nothing Then
+            ' If curves were caught in the window, use the view they belong to
+            Dim c As DrawingCurve = TryCast(obj, DrawingCurve)
+            If c IsNot Nothing Then v = TryCast(c.Parent, DrawingView)
+        End If
+        If v IsNot Nothing AndAlso Not selectedViews.Contains(v) Then selectedViews.Add(v)
+    Next
+    oDoc.SelectSet.Clear()
+
+    ' Nothing pre-selected, so fall back to click-picking with highlighting
+    If selectedViews.Count = 0 Then
+        Dim oHS As HighlightSet = oDoc.CreateHighlightSet()
+        oHS.Color = ThisApplication.TransientObjects.CreateColor(255, 140, 0) ' orange
+
+        MessageBox.Show("Click views to select them (click again to deselect)." & vbCrLf & _
+                        "Press ESC or right-click and choose 'Done' when finished.", _
+                        "Select Views", MessageBoxButtons.OK, MessageBoxIcon.Information)
+
+        Do
+            Try
+                Dim oSelEntity As Object = ThisApplication.CommandManager.Pick(SelectionFilterEnum.kDrawingViewFilter, "Select drawing view (Press ESC to finish)")
+                If oSelEntity Is Nothing Then Exit Do
+
+                Dim pickedView As DrawingView = TryCast(oSelEntity, DrawingView)
+                If pickedView IsNot Nothing Then
+                    If selectedViews.Contains(pickedView) Then
+                        selectedViews.Remove(pickedView)
+                    Else
+                        selectedViews.Add(pickedView)
+                    End If
+
+                    oHS.Clear()
+                    For Each sv As DrawingView In selectedViews
+                        Try
+                            oHS.AddItem(sv)
+                        Catch
+                            For Each cv As DrawingCurve In sv.DrawingCurves
+                                oHS.AddItem(cv)
+                            Next
+                        End Try
+                    Next
+                    ThisApplication.ActiveView.Update()
+                End If
+            Catch
+                Exit Do
+            End Try
+        Loop While True
+
+        oHS.Clear()
+        oHS.Delete()
+        ThisApplication.ActiveView.Update()
+    End If
+
+    If selectedViews.Count = 0 Then Return
+
+    Dim dimensionedCount As Integer = 0
+    Dim skippedCount As Integer = 0
+    Dim tol As Double = 0.01
+
+    For Each oView As DrawingView In selectedViews
+        Try
+            Dim bottomCurve As DrawingCurve = Nothing
+            Dim topCurve As DrawingCurve = Nothing
+            Dim leftCurve As DrawingCurve = Nothing
+            Dim rightCurve As DrawingCurve = Nothing
+
+            Dim topLeft As Point2d = Nothing
+            Dim leftPt As Point2d = Nothing
+            Dim rightPt As Point2d = Nothing
+            Dim bottomPt As Point2d = Nothing
+
+            Dim lowestY As Double = Double.MaxValue
+            Dim highestY As Double = Double.MinValue
+            Dim minX As Double = Double.MaxValue
+            Dim maxX As Double = Double.MinValue
+
+            ' 1. Pass 1: Find global bounds across all line segments
+            For Each oCurve As DrawingCurve In oView.DrawingCurves
+                If oCurve.ProjectedCurveType <> Curve2dTypeEnum.kLineSegmentCurve2d Then Continue For
+                For Each oSeg As DrawingCurveSegment In oCurve.Segments
+                    Try
+                        If Not TypeOf oSeg.Geometry Is LineSegment2d Then Continue For
+                        Dim oLine As LineSegment2d = DirectCast(oSeg.Geometry, LineSegment2d)
+
+                        lowestY = Math.Min(lowestY, Math.Min(oLine.StartPoint.Y, oLine.EndPoint.Y))
+                        highestY = Math.Max(highestY, Math.Max(oLine.StartPoint.Y, oLine.EndPoint.Y))
+                        minX = Math.Min(minX, Math.Min(oLine.StartPoint.X, oLine.EndPoint.X))
+                        maxX = Math.Max(maxX, Math.Max(oLine.StartPoint.X, oLine.EndPoint.X))
+                    Catch
+                    End Try
+                Next
+            Next
+
+            ' 2. Pass 2: Identify exact boundary curves AND their real endpoints
+            For Each oCurve As DrawingCurve In oView.DrawingCurves
+                If oCurve.ProjectedCurveType <> Curve2dTypeEnum.kLineSegmentCurve2d Then Continue For
+
+                For Each oSeg As DrawingCurveSegment In oCurve.Segments
+                    Try
+                        If Not TypeOf oSeg.Geometry Is LineSegment2d Then Continue For
+                        Dim oLine As LineSegment2d = DirectCast(oSeg.Geometry, LineSegment2d)
+
+                        Dim p1 As Point2d = oLine.StartPoint
+                        Dim p2 As Point2d = oLine.EndPoint
+                        Dim dx As Double = Math.Abs(p2.X - p1.X)
+                        Dim dy As Double = Math.Abs(p2.Y - p1.Y)
+
+                        ' Bottom horizontal baseline: keep the left-most one and its left endpoint
+                        If dy < tol AndAlso Math.Abs(Math.Min(p1.Y, p2.Y) - lowestY) < tol Then
+                            Dim leftEnd As Point2d = If(p1.X < p2.X, p1, p2)
+                            If bottomCurve Is Nothing OrElse leftEnd.X < bottomPt.X Then
+                                bottomCurve = oCurve
+                                bottomPt = leftEnd
+                            End If
+                        End If
+
+                        ' Top horizontal line
+                        If dy < tol AndAlso dx > 0.02 Then
+                            If Math.Abs(Math.Max(p1.Y, p2.Y) - highestY) < tol Then
+                                topCurve = oCurve
+                                If p1.X < p2.X Then topLeft = p1 Else topLeft = p2
+                            End If
+                        End If
+
+                        ' Left / right extreme endpoints (prefer ones closest to the bottom)
+                        For Each pt As Point2d In New Point2d() {p1, p2}
+                            If Math.Abs(pt.X - minX) < tol Then
+                                If leftCurve Is Nothing OrElse Math.Abs(pt.Y - lowestY) < Math.Abs(leftPt.Y - lowestY) Then
+                                    leftCurve = oCurve
+                                    leftPt = pt
+                                End If
+                            End If
+                            If Math.Abs(pt.X - maxX) < tol Then
+                                If rightCurve Is Nothing OrElse Math.Abs(pt.Y - lowestY) < Math.Abs(rightPt.Y - lowestY) Then
+                                    rightCurve = oCurve
+                                    rightPt = pt
+                                End If
+                            End If
+                        Next
+
+                    Catch
+                    End Try
+                Next
+            Next
+
+            If bottomCurve Is Nothing OrElse topCurve Is Nothing OrElse _
+               leftCurve Is Nothing OrElse rightCurve Is Nothing Then
+                skippedCount += 1
+                Continue For
+            End If
+
+            ' 3. Create intents using the REAL curve endpoints (this is what makes them associative)
+            Dim intentLength1 As GeometryIntent = oSheet.CreateGeometryIntent(leftCurve, leftPt)
+            Dim intentLength2 As GeometryIntent = oSheet.CreateGeometryIntent(rightCurve, rightPt)
+
+            Dim intentBottom As GeometryIntent = oSheet.CreateGeometryIntent(bottomCurve, bottomPt)
+            Dim intentTop As GeometryIntent = oSheet.CreateGeometryIntent(topCurve, topLeft)
+
+            ' 4. Text placement positions offset outward
+            Dim bottomTextPos As Point2d = oTG.CreatePoint2d((minX + maxX) / 2.0, lowestY - 0.8)
+            Dim leftTextPos As Point2d = oTG.CreatePoint2d(minX - 0.8, (lowestY + highestY) / 2.0)
+
+            ' 5. Add dimensions (edge views detected by real size, not aspect ratio)
+            Dim maxThicknessMM As Double = 30   ' anything this thin or thinner is an edge view
+
+            ' Inventor works in cm; convert the sheet size back to real-world mm using the view scale
+            Dim realW As Double = (maxX - minX) * 10 / oView.Scale
+            Dim realH As Double = (highestY - lowestY) * 10 / oView.Scale
+
+            Dim isNarrow As Boolean = (realW <= maxThicknessMM)   ' side edge view: thickness is horizontal
+            Dim isShort As Boolean = (realH <= maxThicknessMM)    ' top/bottom edge view: thickness is vertical
+
+            ' Horizontal dim: skip on a short edge view (horizontal is the long length)
+            If Not isShort Then
+                Dim widthDim As LinearGeneralDimension = oSheet.DrawingDimensions.GeneralDimensions.AddLinear( _
+                    bottomTextPos, intentLength1, intentLength2, DimensionTypeEnum.kHorizontalDimensionType)
+            End If
+
+            ' Vertical dim: skip on a narrow edge view (vertical is the long height)
+            If Not isNarrow Then
+                Dim heightDim As LinearGeneralDimension = oSheet.DrawingDimensions.GeneralDimensions.AddLinear( _
+                    leftTextPos, intentBottom, intentTop, DimensionTypeEnum.kVerticalDimensionType)
+            End If
+
+            dimensionedCount += 1
+
+        Catch
+            skippedCount += 1
+        End Try
+    Next
+
+    oDoc.Update()
+    MessageBox.Show("Auto-dimensioning complete." & vbCrLf & _
+                    "Successfully dimensioned: " & dimensionedCount & " view(s)." & vbCrLf & _
+                    "Skipped: " & skippedCount, "Auto-Dimension Panels", MessageBoxButtons.OK, MessageBoxIcon.Information)
+End Sub

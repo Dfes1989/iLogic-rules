@@ -1,0 +1,56 @@
+﻿AddReference "System.Windows.Forms"
+AddReference "System.Drawing" ' Crucial addition to fix the Line 19 assembly error
+Imports System.Windows.Forms
+
+Sub Main()
+    Dim oDoc As DrawingDocument = TryCast(ThisApplication.ActiveDocument, DrawingDocument)
+    If oDoc Is Nothing Then Return
+
+    Dim oPrintMgr As DrawingPrintManager = oDoc.PrintManager
+    
+    ' Pop up a standard Windows printer selection dialog
+    Dim printDlg As New PrintDialog()
+    
+    ' Open the dialog window. If the user clicks "Cancel", stop the script entirely.
+    If printDlg.ShowDialog() <> DialogResult.OK Then
+        Return
+    End If
+    
+    ' Pass the user's selected printer name directly to Inventor's Print Manager
+    oPrintMgr.Printer = printDlg.PrinterSettings.PrinterName
+
+    ' Standard Settings
+    oPrintMgr.ColorMode = PrintColorModeEnum.kPrintColorPalette
+    oPrintMgr.NumberOfCopies = 1
+    oPrintMgr.PrintRange = PrintRangeEnum.kPrintSheetRange
+    oPrintMgr.ScaleMode = PrintScaleModeEnum.kPrintBestFitScale ' Fixed the name typo here
+    oPrintMgr.PaperSize = PaperSizeEnum.kPaperSizeA1
+
+    Dim count As Integer = 0
+
+    ' Loop through sheets by their numerical position
+    For i As Integer = 1 To oDoc.Sheets.Count
+        Dim oSheet As Sheet = oDoc.Sheets.Item(i)
+        
+        ' Check for A1 sheets specifically
+        If oSheet.Size = DrawingSheetSizeEnum.kA1DrawingSheetSize AndAlso oSheet.ExcludeFromPrinting = False Then
+            
+            ' Activate the sheet so the printer sees the correct geometry
+            oSheet.Activate()
+            
+            ' Define the range to print only this single active sheet position
+            oPrintMgr.SetSheetRange(i, i)
+            
+            ' Submit the job
+            oPrintMgr.SubmitPrint()
+            count += 1
+        End If
+    Next
+
+    ' Update success messages to accurately reflect A1 output
+    If count > 0 Then
+        MessageBox.Show("Sent " & count & " A1 sheets to printer: " & oPrintMgr.Printer, "Success")
+    Else
+        MessageBox.Show("No A1 sheets found to print.", "Done")
+    End If
+End Sub

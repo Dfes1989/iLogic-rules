@@ -1,0 +1,27 @@
+﻿Sub Main()
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+
+    For Each oDrawView As DrawingView In oSheet.DrawingViews
+        Try
+            ' Check the current style and shift it to its "Hidden Lines Removed" counterpart
+            Select Case oDrawView.ViewStyle
+                
+                ' If it's Shaded with Hidden Lines SHOWN, switch to Shaded (which naturally removes hidden lines)
+                Case DrawingViewStyleEnum.kShadedHiddenLineDrawingViewStyle
+                    oDrawView.ViewStyle = DrawingViewStyleEnum.kShadedDrawingViewStyle
+                
+                ' If it's standard Wireframe with Hidden Lines SHOWN, switch to Standard Hidden Lines REMOVED
+                Case DrawingViewStyleEnum.kHiddenLineDrawingViewStyle
+                    oDrawView.ViewStyle = DrawingViewStyleEnum.kHiddenLineRemovedDrawingViewStyle
+                    
+                ' Any views already set to kShadedDrawingViewStyle or kHiddenLineRemovedDrawingViewStyle are safely ignored
+            End Select
+            
+        Catch
+            ' Safely skip any locked views
+        End Try
+    Next
+
+    oDoc.Update()
+End Sub

@@ -1,0 +1,11 @@
+﻿Dim oDrawDoc As DrawingDocument
+oDrawDoc = ThisApplication.ActiveDocument
+
+Try
+    Dim oNewDef As SketchedSymbolDefinition
+    oNewDef = oDrawDoc.SketchedSymbolDefinitions.Add("TEST COPY")
+
+    MsgBox("Add method works")
+Catch ex As Exception
+    MsgBox("Add failed: " & ex.Message)
+End Try

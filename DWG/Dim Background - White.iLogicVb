@@ -1,0 +1,63 @@
+﻿
+Sub Main()
+
+    If ThisApplication.ActiveDocument.DocumentType <> _
+        DocumentTypeEnum.kDrawingDocumentObject Then
+
+        MessageBox.Show("Please open an Inventor drawing first.")
+        Exit Sub
+    End If
+
+    Dim oDoc As DrawingDocument
+    oDoc = ThisApplication.ActiveDocument
+
+    Dim oCount As Integer = 0
+    Dim oFailed As Integer = 0
+    Dim oObj As Object
+
+    For Each oObj In oDoc.SelectSet
+
+        Try
+
+            If TypeOf oObj Is DrawingDimension Then
+
+                Dim oDim As DrawingDimension
+                oDim = CType(oObj, DrawingDimension)
+
+                oDim.Text.BackgroundColor = _
+                    ThisApplication.TransientObjects.CreateColor(255, 255, 255)
+
+                oDim.Text.UseBackgroundColor = True
+
+                oCount += 1
+
+            ElseIf TypeOf oObj Is GeneralNote Then
+
+                Dim oNote As GeneralNote
+                oNote = CType(oObj, GeneralNote)
+
+                oNote.BackgroundColor = _
+                    ThisApplication.TransientObjects.CreateColor(255, 255, 255)
+
+                oNote.UseBackgroundColor = True
+
+                oCount += 1
+
+            Else
+
+                oFailed += 1
+
+            End If
+
+        Catch
+            oFailed += 1
+        End Try
+
+    Next
+
+    MessageBox.Show( _
+        "Objects changed: " & oCount & vbCrLf & _
+        "Objects skipped or failed: " & oFailed, _
+        "White Text Background")
+
+End Sub

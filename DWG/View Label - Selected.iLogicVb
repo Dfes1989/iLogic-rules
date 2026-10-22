@@ -1,0 +1,82 @@
+﻿Sub Main()
+
+    If ThisApplication.ActiveDocumentType <> kDrawingDocumentObject Then
+        MessageBox.Show("Please open a drawing.", "Wrong Document Type")
+        Exit Sub
+    End If
+
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oTG As TransientGeometry = ThisApplication.TransientGeometry
+
+    ' 1. Check if the user actually selected anything first
+    Dim oSelectSet As SelectSet = oDoc.SelectSet
+    If oSelectSet.Count = 0 Then
+        MessageBox.Show("Please select the Drawing Views or View Labels you want to move first.", "No Selection")
+        Exit Sub
+    End If
+
+    ' CREATE A CACHE LIST: Save the views into memory so we don't lose them on update
+    Dim oSelectedViews As New List(Of DrawingView)
+
+    For Each oObj As Object In oSelectSet
+        Dim oView As DrawingView = Nothing
+
+        If TypeOf oObj Is DrawingView Then
+            oView = DirectCast(oObj, DrawingView)
+        ElseIf TypeOf oObj Is DrawingViewLabel Then
+            Dim oLabel As DrawingViewLabel = DirectCast(oObj, DrawingViewLabel)
+            oView = oLabel.Parent
+        End If
+
+        If oView IsNot Nothing AndAlso Not oSelectedViews.Contains(oView) Then
+            oSelectedViews.Add(oView)
+        End If
+    Next
+
+    ' Variable to track if we need to repeat the loop
+    Dim happyWithResult As MsgBoxResult = MsgBoxResult.No
+
+    Do While happyWithResult = MsgBoxResult.No
+        
+        ' 2. Pop up box to ask for the offset distance
+        Dim userInput As String = InputBox("Enter the label offset distance above the view:", "Label Offset", ".908")
+        
+        Dim offsetValue As Double
+        If Not Double.TryParse(userInput, offsetValue) Then
+            MessageBox.Show("Invalid number entered or action cancelled. Exiting rule.", "Error")
+            Exit Sub
+        End If
+
+        Dim count As Integer = 0
+
+        ' 3. Loop through ONLY our saved memory list of views
+        For Each oView As DrawingView In oSelectedViews
+            Try
+                If oView.ShowLabel Then
+                    ' Centre the label horizontally on the view
+                    Dim x As Double = oView.Center.X
+
+                    ' Position ABOVE the view using your custom input value
+                    Dim y As Double = oView.Top + offsetValue
+
+                    oView.Label.Position = oTG.CreatePoint2d(x, y)
+
+                    count += 1
+                End If
+            Catch
+                ' Safely skip any individual view calculation errors
+            End Try
+        Next
+
+        ' Update the document immediately so you can see the changes on screen
+        oDoc.Update()
+
+        ' 4. Ask the user if they want to tweak it or exit
+        happyWithResult = MessageBox.Show(count & " labels positioned at Top + " & offsetValue & vbLf & vbLf & _
+                                          "Are you happy with the position?", _
+                                          "Verify Alignment", _
+                                          MessageBoxButtons.YesNo, _
+                                          MessageBoxIcon.Question)
+    Loop
+
+End Sub

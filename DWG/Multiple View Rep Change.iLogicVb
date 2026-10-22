@@ -1,0 +1,194 @@
+﻿Imports System.Collections
+Imports System.Windows.Forms
+
+Sub Main()
+
+    '--------------------------------------------------
+    ' CHECK ACTIVE DOCUMENT
+    '--------------------------------------------------
+    If ThisApplication.ActiveDocument.DocumentType <> _
+        DocumentTypeEnum.kDrawingDocumentObject Then
+
+        MessageBox.Show("Please open an Inventor drawing first.", _
+                        "Change Design View Representation")
+        Exit Sub
+    End If
+
+    Dim oDrawDoc As DrawingDocument
+    oDrawDoc = ThisApplication.ActiveDocument
+
+    Dim oSelectedViews As New ArrayList
+
+    '--------------------------------------------------
+    ' SELECT MULTIPLE DRAWING VIEWS
+    ' Press ESC when finished
+    '--------------------------------------------------
+    Do
+        Dim oPickedView As DrawingView = Nothing
+
+        Try
+            oPickedView = ThisApplication.CommandManager.Pick( _
+                SelectionFilterEnum.kDrawingViewFilter, _
+                "Select a drawing view. Press ESC when finished.")
+
+        Catch
+            Exit Do
+        End Try
+
+        If oPickedView Is Nothing Then Exit Do
+
+        'Avoid adding the same view twice
+        If Not oSelectedViews.Contains(oPickedView) Then
+            oSelectedViews.Add(oPickedView)
+        End If
+
+    Loop
+
+    If oSelectedViews.Count = 0 Then
+        MessageBox.Show("No drawing views were selected.", _
+                        "Change Design View Representation")
+        Exit Sub
+    End If
+
+    '--------------------------------------------------
+    ' FIND REPRESENTATIONS COMMON TO ALL SELECTED VIEWS
+    '--------------------------------------------------
+    Dim oCommonReps As New ArrayList
+    Dim oSkippedViews As Integer = 0
+    Dim oFirstAssembly As Boolean = True
+
+    For Each oView As DrawingView In oSelectedViews
+
+        Try
+            Dim oModelDoc As Document
+            oModelDoc = oView.ReferencedDocumentDescriptor.ReferencedDocument
+
+            'Design View Representations apply here to assemblies
+            If oModelDoc.DocumentType <> _
+                DocumentTypeEnum.kAssemblyDocumentObject Then
+
+                oSkippedViews += 1
+                Continue For
+            End If
+
+            Dim oAsmDoc As AssemblyDocument
+            oAsmDoc = CType(oModelDoc, AssemblyDocument)
+
+            Dim oReps As DesignViewRepresentations
+            oReps = oAsmDoc.ComponentDefinition. _
+                RepresentationsManager.DesignViewRepresentations
+
+            If oFirstAssembly Then
+
+                For Each oRep As DesignViewRepresentation In oReps
+                    If Not oCommonReps.Contains(oRep.Name) Then
+                        oCommonReps.Add(oRep.Name)
+                    End If
+                Next
+
+                oFirstAssembly = False
+
+            Else
+
+                'Remove representations not present in this assembly
+                For i As Integer = oCommonReps.Count - 1 To 0 Step -1
+
+                    Dim oFound As Boolean = False
+
+                    For Each oRep As DesignViewRepresentation In oReps
+                        If String.Equals(CStr(oCommonReps(i)), _
+                                         oRep.Name, _
+                                         StringComparison.OrdinalIgnoreCase) Then
+                            oFound = True
+                            Exit For
+                        End If
+                    Next
+
+                    If Not oFound Then
+                        oCommonReps.RemoveAt(i)
+                    End If
+
+                Next
+
+            End If
+
+        Catch
+            oSkippedViews += 1
+        End Try
+
+    Next
+
+    '--------------------------------------------------
+    ' CHECK RESULTS
+    '--------------------------------------------------
+    If oFirstAssembly OrElse oCommonReps.Count = 0 Then
+
+        MessageBox.Show( _
+            "No common Design View Representations were found." & vbCrLf & _
+            "Check that the selected views reference resolved assemblies " & _
+            "with matching representation names.", _
+            "Change Design View Representation")
+
+        Exit Sub
+    End If
+
+    '--------------------------------------------------
+    ' ASK USER TO CHOOSE REPRESENTATION
+    '--------------------------------------------------
+    Dim oChosenRep As String
+
+    oChosenRep = InputListBox( _
+        "Choose the Design View Representation to apply to the selected views:", _
+        oCommonReps, _
+        CStr(oCommonReps(0)), _
+        "Change Design View Representation", _
+        "Common representations")
+
+    If String.IsNullOrEmpty(oChosenRep) Then Exit Sub
+
+    '--------------------------------------------------
+    ' APPLY REPRESENTATION TO ALL SELECTED VIEWS
+    '--------------------------------------------------
+    Dim oChanged As Integer = 0
+    Dim oFailed As Integer = 0
+
+    For Each oView As DrawingView In oSelectedViews
+
+        Try
+            Dim oModelDoc As Document
+            oModelDoc = oView.ReferencedDocumentDescriptor.ReferencedDocument
+
+            If oModelDoc.DocumentType = _
+                DocumentTypeEnum.kAssemblyDocumentObject Then
+
+                oView.SetDesignViewRepresentation(oChosenRep, True)
+                oChanged += 1
+
+            End If
+
+        Catch
+            oFailed += 1
+        End Try
+
+    Next
+
+    '--------------------------------------------------
+    ' UPDATE DRAWING AND REPORT RESULTS
+    '--------------------------------------------------
+    oDrawDoc.Update()
+
+    Dim oMessage As String
+    oMessage = "Representation: " & oChosenRep & vbCrLf & vbCrLf & _
+                "Views updated: " & oChanged
+
+    If oSkippedViews > 0 Then
+        oMessage &= vbCrLf & "Views skipped during inspection: " & oSkippedViews
+    End If
+
+    If oFailed > 0 Then
+        oMessage &= vbCrLf & "Views that failed to update: " & oFailed
+    End If
+
+    MessageBox.Show(oMessage, "Change Design View Representation")
+
+End Sub

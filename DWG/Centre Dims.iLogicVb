@@ -1,0 +1,27 @@
+﻿Sub Main()
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then Return
+
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+
+    ' Run the double-pass loop safely
+    For i = 1 To 2
+        For Each oDim As GeneralDimension In oSheet.DrawingDimensions.GeneralDimensions
+            If TypeOf oDim Is LinearGeneralDimension Then
+                Try
+                    oDim.CenterText()
+                Catch
+                    ' Safely skip broken dimensions
+                End Try
+            End If
+        Next
+        
+        ' Recalculate positions
+        oDoc.Update() 
+        
+        ' Force Inventor to talk to Windows so it doesn't go into "Ghost Mode"
+        ThisApplication.UserInterfaceManager.DoEvents()
+    Next
+
+    ' Removed the MessageBox so it runs completely silently in the background!
+End Sub

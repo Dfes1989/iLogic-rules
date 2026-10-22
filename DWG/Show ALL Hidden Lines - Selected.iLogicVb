@@ -1,0 +1,35 @@
+﻿Sub Main()
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    
+    ' 1. Access the selected objects on screen
+    Dim oSelectSet As SelectSet = oDoc.SelectSet
+    If oSelectSet.Count = 0 Then
+        MessageBox.Show("Please select the drawing views you want to change first.", "No Selection")
+        Exit Sub
+    End If
+
+    Dim count As Integer = 0
+
+    ' 2. Loop through only what the user has highlighted
+    For Each oObj As Object In oSelectSet
+        
+        ' Check if the selected item is actually a drawing view
+        If TypeOf oObj Is DrawingView Then
+            Dim oView As DrawingView = DirectCast(oObj, DrawingView)
+            
+            Try
+                ' Change the style to Hidden Line
+                oView.ViewStyle = DrawingViewStyleEnum.kHiddenLineDrawingViewStyle
+                count += 1
+            Catch
+                ' Smoothly skip if a specific view is locked or uneditable
+            End Try
+        End If
+    Next
+
+    ' 3. Refresh the document if changes were made
+    If count > 0 Then
+        oDoc.Update()
+        StatusBarText = count & " views changed to Hidden Line."
+    End If
+End Sub

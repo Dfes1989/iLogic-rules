@@ -1,0 +1,67 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then Return
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+    
+    Dim viewsUpdated As Integer = 0
+    Dim skippedViews As Integer = 0
+
+    ' Loop through all views on the current sheet
+    For Each oView As DrawingView In oSheet.DrawingViews
+        Try
+            ' 1. Use the modern API to read the drop-down menu safely
+            Dim currentRep As String = oView.DesignViewRepresentation
+            
+            ' Skip views that genuinely have no representation
+            If String.IsNullOrEmpty(currentRep) Then 
+                skippedViews += 1
+                Continue For
+            End If
+            
+            ' 2. Use the modern API to check if the tick box is ALREADY checked
+            If oView.DesignViewAssociative = True Then
+                Continue For 
+            End If
+            
+            ' 3. Safely get the model to find a temporary toggle state
+            Dim refDoc As Document = oView.ReferencedDocumentDescriptor.ReferencedDocument
+            Dim repMgr As RepresentationsManager = Nothing
+            
+            If refDoc.DocumentType = DocumentTypeEnum.kAssemblyDocumentObject Then
+                Dim asmDoc As AssemblyDocument = DirectCast(refDoc, AssemblyDocument)
+                repMgr = asmDoc.ComponentDefinition.RepresentationsManager
+            ElseIf refDoc.DocumentType = DocumentTypeEnum.kPartDocumentObject Then
+                Dim prtDoc As PartDocument = DirectCast(refDoc, PartDocument)
+                repMgr = prtDoc.ComponentDefinition.RepresentationsManager
+            End If
+
+            If repMgr IsNot Nothing Then
+                ' Find ANY other representation to use as a bounce state
+                Dim tempRep As String = ""
+                For Each rep As DesignViewRepresentation In repMgr.DesignViewRepresentations
+                    If rep.Name <> currentRep Then
+                        tempRep = rep.Name
+                        Exit For
+                    End If
+                Next
+                
+                ' 4. Perform the toggle to force the API to accept the new True flag
+                If tempRep <> "" Then
+                    oView.SetDesignViewRepresentation(tempRep, False)
+                    oView.SetDesignViewRepresentation(currentRep, True)
+                    viewsUpdated += 1
+                Else
+                    skippedViews += 1
+                End If
+            End If
+        Catch
+            ' If anything fails, tally it
+            skippedViews += 1
+        End Try
+    Next
+
+    oDoc.Update()
+    
+    MessageBox.Show("Successfully locked associativity on " & viewsUpdated & " view(s).", "Operation Complete")
+End Sub

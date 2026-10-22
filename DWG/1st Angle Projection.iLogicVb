@@ -1,0 +1,65 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    Dim oSymbolDrawingName As String = "Library.idw"
+    Dim insertSymbolName As String = "1st angle projection"
+
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then Return
+    Dim oDrawDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oTG As TransientGeometry = ThisApplication.TransientGeometry
+
+    ' Loop through all sheets
+    For Each oSheet As Sheet In oDrawDoc.Sheets
+
+        ' 1. THE FIX: Delete ANY existing 1st or 3rd angle symbols to prevent stacking
+        Dim deleteList As New List(Of SketchedSymbol)
+        For Each oSymbol As SketchedSymbol In oSheet.SketchedSymbols
+            If oSymbol.Name = "3rd angle projection" Or oSymbol.Name = "1st angle projection" Then
+                deleteList.Add(oSymbol)
+            End If
+        Next
+        For Each oSymbol As SketchedSymbol In deleteList
+            oSymbol.Delete()
+        Next
+
+        ' Setup the library symbol
+        Dim oSketchSymLib As SketchedSymbolDefinitionLibrary
+        Try
+            oSketchSymLib = oDrawDoc.SketchedSymbolDefinitions.SketchedSymbolDefinitionLibraries.Item(oSymbolDrawingName)
+        Catch
+            MessageBox.Show("Could not find library: " & oSymbolDrawingName, "Library Missing")
+            Return
+        End Try
+
+        Dim oSymDef As SketchedSymbolDefinition
+        Try
+            oSymDef = oDrawDoc.SketchedSymbolDefinitions.AddFromLibrary(oSketchSymLib, insertSymbolName, True)
+        Catch
+            oSymDef = oDrawDoc.SketchedSymbolDefinitions.Item(insertSymbolName)
+        End Try
+
+        ' 2. THE FIX: Apply different coordinates based on the Sheet Size
+        Dim xPos As Double
+        Dim yPos As Double
+
+        If oSheet.Size = DrawingSheetSizeEnum.kA1DrawingSheetSize Then
+            ' A1 Coordinates
+            xPos = oSheet.Width - 3.7
+            yPos = 8.85
+        ElseIf oSheet.Size = DrawingSheetSizeEnum.kA3DrawingSheetSize Then
+            ' A3 Coordinates (PLACEHOLDERS - NEED ADJUSTING)
+            xPos = oSheet.Width - 2.8
+            yPos = 7.85
+        Else
+            ' Fallback for any other random sheet sizes
+            xPos = oSheet.Width - 3.7
+            yPos = 8.85
+        End If
+        
+        Dim oPosition As Point2d = oTG.CreatePoint2d(xPos, yPos)
+        
+        ' Place symbol
+        oSheet.SketchedSymbols.Add(oSymDef, oPosition, 0, 1, Nothing)
+    Next
+
+    MessageBox.Show("Replaced and repositioned all projection symbols.", "Operation Complete")
+End Sub

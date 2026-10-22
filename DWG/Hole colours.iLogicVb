@@ -1,0 +1,988 @@
+﻿Imports Inventor
+Imports System.Windows.Forms
+Imports System.Collections.Generic
+Sub Main()
+'===============================================================
+' HOLE ANALYSIS - PLAIN HOLES + Ø8 COUNTERBORE
+'
+' Ø2   = N/A
+' Ø4 THRU  = Orange
+' Ø4 x 35   = Orange
+' Ø5 x 12mm deep = Red
+' Ø5   = Pink
+' Ø7   = Yellow
+' Ø8 x 13   = Green
+' Ø8 x 30   = Green
+' Ø8 x 35 = Purple
+' Ø10  = Blue
+' Ø35  = Brown
+'
+' SPECIAL:
+' Ø8 THRU + ⌴Ø16 x 3mm DEEP = Grey
+'
+' The counterbore detection looks for:
+'   - Ø8 cylindrical face
+'   - Ø16 cylindrical face
+'   - Ø16 face approximately 2mm deep
+'   - Both cylinders sharing the same axis
+'
+' Inventor geometry is in cm.
+'===============================================================
+
+
+'---------------------------------------------------------------
+' CHECK ACTIVE DOCUMENT
+'---------------------------------------------------------------
+
+Dim oDoc As DrawingDocument
+
+If ThisApplication.ActiveDocument Is Nothing Then
+    MessageBox.Show("No active document.", "Hole Analysis")
+    Return
+End If
+
+If Not TypeOf ThisApplication.ActiveDocument Is DrawingDocument Then
+    MessageBox.Show("Please run this rule from a drawing.", "Hole Analysis")
+    Return
+End If
+
+oDoc = ThisApplication.ActiveDocument
+
+'---------------------------------------------------------------
+' SELECT DRAWING VIEW
+'---------------------------------------------------------------
+
+Dim oView As DrawingView = Nothing
+
+Try
+
+    oView = ThisApplication.CommandManager.Pick( _
+        SelectionFilterEnum.kDrawingViewFilter, _
+        "Select a drawing view")
+
+Catch
+
+    Return
+
+End Try
+
+If oView Is Nothing Then Return
+
+Dim oSheet As Sheet = oView.Parent
+
+'---------------------------------------------------------------
+' COLOURS
+'---------------------------------------------------------------
+
+Dim greyColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(180, 180, 180)
+
+Dim orangeColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(255, 165, 0)
+
+Dim redColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(255, 0, 0)
+
+Dim pinkColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(255, 192, 203)
+
+Dim yellowColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(235, 235, 0)
+
+Dim greenColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(0, 180, 0)
+
+Dim blueColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(0, 0, 255)
+
+Dim brownColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(196, 164, 132)
+
+Dim purpleColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(219, 141, 255)
+	
+Dim blackColor As Color = _
+    ThisApplication.TransientObjects.CreateColor(0, 0, 0)
+
+'---------------------------------------------------------------
+' COUNTERS
+'---------------------------------------------------------------
+
+Dim count2 As Integer = 0
+Dim count4 As Integer = 0
+Dim count4x35 As Integer = 0
+Dim count5x12 As Integer = 0
+Dim count7 As Integer = 0
+Dim count8x13 As Integer = 0
+Dim count8x30 As Integer = 0
+Dim count8_cam_stub As Integer = 0
+Dim count8Counterbore As Integer = 0
+Dim count10 As Integer = 0
+Dim count15x15 As Integer = 0
+Dim count35x14 As Integer = 0
+
+'---------------------------------------------------------------
+' COUNTERBORE INFORMATION
+'
+' These lists contain the DrawingCurve INDEX numbers which
+' belong to an Ø8 + Ø16 x 2mm counterbored hole.
+'---------------------------------------------------------------
+
+Dim counterbore8Curves As New List(Of Integer)
+Dim counterbore16Curves As New List(Of Integer)
+Dim camStubFaces As New List(Of Face)
+
+'---------------------------------------------------------------
+' BUILD CYLINDER INFORMATION FROM THE DRAWING VIEW
+'
+' We collect:
+'
+'   Curve number
+'   Diameter
+'   Cylindrical depth
+'   Cylinder base point
+'   Cylinder axis
+'
+' This allows us to compare separate drawing curves.
+'---------------------------------------------------------------
+
+Dim cylCurveIndex As New List(Of Integer)
+Dim cylDiameter As New List(Of Double)
+Dim cylDepth As New List(Of Double)
+Dim cylBasePoint As New List(Of Point)
+Dim cylAxisX As New List(Of Double)
+Dim cylAxisY As New List(Of Double)
+Dim cylAxisZ As New List(Of Double)
+
+For curveIndex As Integer = 1 To oView.DrawingCurves.Count
+
+    Dim oCurve As DrawingCurve = oView.DrawingCurves.Item(curveIndex)
+
+    Dim oGeom As Object = Nothing
+
+    Try
+        oGeom = oCurve.ModelGeometry
+    Catch
+        oGeom = Nothing
+    End Try
+
+    If oGeom Is Nothing Then Continue For
+
+    Dim facesToCheck As New List(Of Face)
+
+    '-----------------------------------------------------------
+    ' MODEL GEOMETRY = EDGE
+    '-----------------------------------------------------------
+
+    If TypeOf oGeom Is Edge Then
+
+        Dim oEdge As Edge = DirectCast(oGeom, Edge)
+
+        For Each oFace As Face In oEdge.Faces
+
+            If Not FaceAlreadyListed(facesToCheck, oFace) Then
+                facesToCheck.Add(oFace)
+            End If
+
+        Next
+
+    '-----------------------------------------------------------
+    ' MODEL GEOMETRY = FACE
+    '-----------------------------------------------------------
+
+    ElseIf TypeOf oGeom Is Face Then
+
+        facesToCheck.Add(DirectCast(oGeom, Face))
+
+    End If
+
+    '-----------------------------------------------------------
+    ' CHECK EACH FACE
+    '-----------------------------------------------------------
+
+    For Each oFace As Face In facesToCheck
+
+        Try
+
+            If oFace.SurfaceType <> SurfaceTypeEnum.kCylinderSurface Then
+                Continue For
+            End If
+
+            Dim oCyl As Cylinder = DirectCast(oFace.Geometry, Cylinder)
+
+            Dim diameterMm As Double = oCyl.Radius * 20.0
+
+            '---------------------------------------------------
+            ' GET CYLINDRICAL DEPTH
+            '---------------------------------------------------
+
+            Dim depthMm As Double = GetCylinderDepthMm(oFace)
+
+            '---------------------------------------------------
+            ' STORE CYLINDER INFORMATION
+            '---------------------------------------------------
+
+            cylCurveIndex.Add(curveIndex)
+            cylDiameter.Add(diameterMm)
+            cylDepth.Add(depthMm)
+
+            cylBasePoint.Add(oCyl.BasePoint)
+
+            cylAxisX.Add(oCyl.AxisVector.X)
+            cylAxisY.Add(oCyl.AxisVector.Y)
+            cylAxisZ.Add(oCyl.AxisVector.Z)
+
+        Catch
+
+            ' Ignore geometry that cannot be interrogated
+
+        End Try
+
+    Next
+
+Next
+
+'===============================================================
+' FIND Ø8 + Ø16 x 3mm COUNTERBORES
+'===============================================================
+
+For i As Integer = 0 To cylDiameter.Count - 1
+
+    '-----------------------------------------------------------
+    ' WE ARE LOOKING FOR THE Ø8 PART
+    '-----------------------------------------------------------
+
+    If Not IsEqual(cylDiameter(i), 8.0, 0.05) Then
+        Continue For
+    End If
+
+    Dim curve8 As Integer = cylCurveIndex(i)
+
+    '-----------------------------------------------------------
+    ' LOOK FOR AN Ø16 x 3mm CYLINDER ON THE SAME AXIS
+    '-----------------------------------------------------------
+
+    For j As Integer = 0 To cylDiameter.Count - 1
+
+        If i = j Then Continue For
+
+        If Not IsEqual(cylDiameter(j), 16.0, 0.05) Then
+            Continue For
+        End If
+
+        ' Ø16 must be approximately 3mm deep
+        If Not IsEqual(cylDepth(j), 3.0, 0.20) Then
+            Continue For
+        End If
+
+        '-------------------------------------------------------
+        ' CHECK THAT THE Ø8 AND Ø16 CYLINDERS ARE COAXIAL
+        '-------------------------------------------------------
+
+        If CylindersAreCoaxial( _
+            cylBasePoint(i), _
+            cylAxisX(i), _
+            cylAxisY(i), _
+            cylAxisZ(i), _
+            cylBasePoint(j), _
+            cylAxisX(j), _
+            cylAxisY(j), _
+            cylAxisZ(j)) Then
+
+            Dim curve16 As Integer = cylCurveIndex(j)
+
+            '---------------------------------------------------
+            ' STORE BOTH CURVES
+            '---------------------------------------------------
+
+            If Not IntegerListContains(counterbore8Curves, curve8) Then
+                counterbore8Curves.Add(curve8)
+            End If
+
+            If Not IntegerListContains(counterbore16Curves, curve16) Then
+                counterbore16Curves.Add(curve16)
+            End If
+
+            Exit For
+
+        End If
+
+    Next
+
+Next
+
+'===============================================================
+' COLOUR COUNTERBORE CURVES FIRST
+'
+' This is important because the normal Ø8 code below must NOT
+' turn the Ø8 part green afterwards.
+'===============================================================
+
+For Each curveIndex As Integer In counterbore8Curves
+
+    Try
+        oView.DrawingCurves.Item(curveIndex).Color = greyColor
+    Catch
+    End Try
+
+Next
+
+For Each curveIndex As Integer In counterbore16Curves
+
+    Try
+        oView.DrawingCurves.Item(curveIndex).Color = greyColor
+    Catch
+    End Try
+
+Next
+
+'===============================================================
+' NORMAL HOLE ANALYSIS
+'===============================================================
+
+For curveIndex As Integer = 1 To oView.DrawingCurves.Count
+
+    '-----------------------------------------------------------
+    ' IF THIS IS THE Ø8 PART OF A COUNTERBORE,
+    ' DO NOT LET THE NORMAL Ø8 CODE COLOUR IT GREEN.
+    '-----------------------------------------------------------
+
+    If IntegerListContains(counterbore8Curves, curveIndex) Then
+        Continue For
+    End If
+
+    '-----------------------------------------------------------
+    ' THE Ø16 PART IS ALREADY GREY.
+    '-----------------------------------------------------------
+
+    If IntegerListContains(counterbore16Curves, curveIndex) Then
+        Continue For
+    End If
+
+    Dim oCurve As DrawingCurve = oView.DrawingCurves.Item(curveIndex)
+
+    Dim oGeom As Object = Nothing
+
+    Try
+        oGeom = oCurve.ModelGeometry
+    Catch
+        oGeom = Nothing
+    End Try
+
+    If oGeom Is Nothing Then Continue For
+
+    Dim facesToCheck As New List(Of Face)
+
+    '-----------------------------------------------------------
+    ' EDGE
+    '-----------------------------------------------------------
+
+    If TypeOf oGeom Is Edge Then
+
+        Dim oEdge As Edge = DirectCast(oGeom, Edge)
+
+        For Each oFace As Face In oEdge.Faces
+
+            If Not FaceAlreadyListed(facesToCheck, oFace) Then
+                facesToCheck.Add(oFace)
+            End If
+
+        Next
+
+    '-----------------------------------------------------------
+    ' FACE
+    '-----------------------------------------------------------
+
+    ElseIf TypeOf oGeom Is Face Then
+
+        facesToCheck.Add(DirectCast(oGeom, Face))
+
+    End If
+
+    Dim curveMatched As Boolean = False
+
+    '-----------------------------------------------------------
+    ' CHECK FACES
+    '-----------------------------------------------------------
+
+    For Each oFace As Face In facesToCheck
+
+        If curveMatched Then Exit For
+
+        Try
+
+            If oFace.SurfaceType <> SurfaceTypeEnum.kCylinderSurface Then
+                Continue For
+            End If
+
+            Dim oCyl As Cylinder = DirectCast(oFace.Geometry, Cylinder)
+
+            Dim holeDia As Double = oCyl.Radius * 20.0
+
+            Dim matchedColor As Color = Nothing
+            Dim holeType As String = ""
+
+
+            '---------------------------------------------------
+            ' Ø2
+            '---------------------------------------------------
+
+            If IsEqual(holeDia, 2.0) Then
+
+                matchedColor = blackColor
+                holeType = "2"
+
+            '---------------------------------------------------
+            ' Ø4 x 35mm DEEP
+            '---------------------------------------------------
+
+            ElseIf IsEqual(holeDia, 4.0) AndAlso _
+                   IsEqual(GetCylinderDepthMm(oFace), 35.0, 0.20) Then
+
+                matchedColor = orangeColor
+                holeType = "4x35"
+				
+            '---------------------------------------------------
+            ' Ø4
+            '---------------------------------------------------
+				
+            ElseIf IsEqual(holeDia, 4.0) Then
+
+                matchedColor = orangeColor
+                holeType = "4"				
+
+            '---------------------------------------------------
+            ' Ø5 x 12mm DEEP
+            '---------------------------------------------------
+
+            ElseIf IsEqual(holeDia, 5.0) AndAlso _
+                   IsEqual(GetCylinderDepthMm(oFace), 12.0, 0.20) Then
+
+                matchedColor = redColor
+                holeType = "5x12"
+
+            '---------------------------------------------------
+            ' Ø5
+            '---------------------------------------------------
+
+            ElseIf IsEqual(holeDia, 5.0) Then
+
+                matchedColor = pinkColor
+                holeType = "5"
+
+            '---------------------------------------------------
+            ' Ø6
+            '---------------------------------------------------
+
+            ElseIf IsEqual(holeDia, 6.0) Then
+
+                matchedColor = yellowColor
+                holeType = "6"
+				
+            '---------------------------------------------------
+            ' Ø7 x 13mm DEEP
+            '---------------------------------------------------
+
+            ElseIf IsEqual(holeDia, 7.0) AndAlso _
+                   IsEqual(GetCylinderDepthMm(oFace), 13.0, 0.20) Then
+
+                matchedColor = yellowColor
+                holeType = "7x13"
+				
+            '---------------------------------------------------
+            ' Ø7
+            '---------------------------------------------------
+
+            ElseIf IsEqual(holeDia, 7.0) Then
+
+                matchedColor = yellowColor
+                holeType = "7"
+
+            '---------------------------------------------------
+            ' Ø8
+            '
+            ' If we reach here it is NOT a counterbore because
+            ' counterbore curves were removed above.
+            '---------------------------------------------------
+
+            ' Match short 8mm stub entering the cam pocket
+            ElseIf IsEqual(holeDia, 8.0) AndAlso GetCylinderDepthMm(oFace) < 3.0 Then                
+                matchedColor = purpleColor
+                holeType = "8_cam_stub"
+				
+            '---------------------------------------------------
+            ' Ø8 VARIANTS (Checked by depth)
+            '---------------------------------------------------
+            
+            ' Ø8 x 13mm Deep
+            ElseIf IsEqual(holeDia, 8.0) AndAlso IsEqual(GetCylinderDepthMm(oFace), 13.0, 0.20) Then
+                matchedColor =  greenColor
+                holeType = "8x13"
+
+            ' Ø8 x 30mm Deep
+            ElseIf IsEqual(holeDia, 8.0) AndAlso IsEqual(GetCylinderDepthMm(oFace), 30.0, 0.20) Then
+                matchedColor =  greenColor
+                holeType = "8x30"
+
+            ' Standard Ø8 Thru (Any depth that didn't match the specific deep ones above)
+            ElseIf IsEqual(holeDia, 8.0) Then
+                matchedColor = greenColor
+                holeType = "8"
+
+            '---------------------------------------------------
+            ' Ø10
+            '---------------------------------------------------
+
+            ElseIf IsEqual(holeDia, 10.0) Then
+
+                matchedColor = blueColor
+                holeType = "10"
+				
+            '---------------------------------------------------
+            ' Ø15 x 15mm DEEP
+            '---------------------------------------------------
+
+            ElseIf IsEqual(holeDia, 15.0) AndAlso _
+                   IsEqual(GetCylinderDepthMm(oFace), 15.0, 0.20) Then
+
+                matchedColor = purpleColor
+                holeType = "15x15"
+
+            '---------------------------------------------------
+            ' Ø35
+            '---------------------------------------------------
+
+            ElseIf IsEqual(holeDia, 35.0) Then
+
+                matchedColor = brownColor
+                holeType = "35x14"
+
+            End If
+
+            '---------------------------------------------------
+            ' APPLY COLOUR
+            '---------------------------------------------------
+
+            If matchedColor IsNot Nothing Then
+
+                oCurve.Color = matchedColor
+
+                Select Case holeType
+				    			
+					Case "8_cam_stub"
+						If Not FaceAlreadyListed(camStubFaces, oFace) Then
+						camStubFaces.Add(oFace)
+						End If
+						curveMatched = True
+						Exit For
+
+                    Case "2"
+                        count2 += 1
+
+                    Case "4"
+                        count4 += 1
+						
+                    Case "4x35"
+                        count4x35 += 1						
+
+                    Case "5x12"
+                        count5x12 += 1
+                    
+					Case "7"
+                        count7 += 1	
+						
+					Case "7x13"
+                        count7x13 += 1	
+
+                    Case "8x13"
+                        count8x13 += 1
+
+                    Case "8x30"
+                        count8x30 += 1
+						
+                    Case "10"
+                        count10 += 1
+
+                    Case "15x15"
+                        count15x15 += 1
+						
+                    Case "35x14"
+                        count35x14 += 1
+
+                End Select
+
+                curveMatched = True
+
+            End If
+
+        Catch
+
+            ' Ignore geometry which cannot be processed
+
+        End Try
+
+    Next
+
+Next
+
+'===============================================================
+' COUNT COUNTERBORED Ø8 HOLES
+'===============================================================
+
+count8_cam_stub = camStubFaces.Count
+count8Counterbore = counterbore8Curves.Count
+
+'===============================================================
+' TOTAL
+'===============================================================
+
+Dim totalHoles As Integer = _
+    count2 + _
+    count4 + _
+	count4x35 + _
+    count5x12 + _
+	count7 + _
+	count7x13 + _
+	count8_cam_stub + _
+    count8 + _
+    count8x13 + _	
+    count8x30 + _
+    count8Counterbore + _
+    count10 + _
+	count15x15 + _
+    count35x14
+
+'===============================================================
+' UPDATE DRAWING
+'===============================================================
+
+oDoc.Update()
+
+'===============================================================
+' REPORT
+'===============================================================
+
+Dim report As String = ""
+
+report &= "HOLE ANALYSIS" & vbCrLf
+report &= "--------------" & vbCrLf
+report &= "Drawing View: " & oView.Name & vbCrLf
+report &= vbCrLf
+
+report &= "Ø2 - " & count2 & vbCrLf
+report &= "Ø4 - " & count4 &vbCrLf
+report &= "Ø4 x 35 - " & count4x35 & vbCrLf
+report &= "Ø5 x 12DP - " & count5x12 & vbCrLf
+report &= "Ø7 - " & count7 & vbCrLf
+report &= "Ø7 x 13 - " & count7x13 & vbCrLf
+report &= "Ø8 x 13 - " & count8x13 & vbCrLf
+report &= "Ø8 x 30 - " & count8x30 & vbCrLf
+report &= "Ø8 x 35 - " & count8_cam_stub & vbCrLf
+report &= "Ø8 THRU, ⌴Ø16 3mm DEEP - " & count8Counterbore & vbCrLf
+report &= "Ø10 - " & count10 & vbCrLf
+report &= "Ø15 x 15DP - " & count15x15 & vbCrLf
+report &= "Ø35 x 14 - " & count35x14 & vbCrLf
+
+report &= vbCrLf
+report &= "------------------" & vbCrLf
+report &= "TOTAL HOLES: " & totalHoles
+
+'===============================================================
+' NO HOLES FOUND
+'===============================================================
+
+If totalHoles = 0 Then
+
+    MessageBox.Show( _
+        "No recognised holes were found in drawing view '" & _
+        oView.Name & "'.", _
+        "Hole Analysis")
+
+    Return
+
+End If
+
+'===============================================================
+' COPY REPORT TO CLIPBOARD
+'===============================================================
+
+Try
+
+    My.Computer.Clipboard.SetText(report)
+
+Catch
+
+    ' Clipboard failure does not stop the rule
+
+End Try
+
+'===============================================================
+' SHOW REPORT / INSERT GENERAL NOTE
+'===============================================================
+
+Dim answer As DialogResult
+
+answer = MessageBox.Show( _
+    report & vbCrLf & vbCrLf & _
+    "YES = Insert report as General Note" & vbCrLf & _
+    "NO = Leave report on clipboard only" & vbCrLf & _
+    "CANCEL = Do not insert note", _
+    "Hole Analysis", _
+    MessageBoxButtons.YesNoCancel, _
+    MessageBoxIcon.Information)
+
+If answer = DialogResult.Yes Then
+
+    Try
+
+        Dim xPos As Double = oSheet.Width - -2.0
+        Dim yPos As Double = -2.0
+
+        ' Create a Point2d object using TransientGeometry
+        Dim oTG As TransientGeometry = ThisApplication.TransientGeometry
+        Dim oPoint As Point2d = oTG.CreatePoint2d(xPos, yPos)
+
+        ' Pass the Point2d and the report string
+        oSheet.DrawingNotes.GeneralNotes.AddFitted(oPoint, report)
+
+        oDoc.Update()
+
+    Catch ex As Exception
+
+        MessageBox.Show( _
+            "The hole analysis was completed, but the General Note could not be inserted." & _
+            vbCrLf & vbCrLf & ex.Message, _
+            "Hole Analysis")
+
+    End Try
+
+End If
+End Sub
+
+'================================================================
+' FUNCTIONS
+'================================================================
+
+'---------------------------------------------------------------
+' GET CYLINDRICAL FACE DEPTH
+'
+' Finds the circular edges of the cylindrical face and measures
+' the distance between their centres.
+'
+' Inventor geometry = cm
+' Result converted to mm.
+'---------------------------------------------------------------
+
+Function GetCylinderDepthMm(oFace As Face) As Double
+
+    Dim firstCentre As Point = Nothing
+    Dim secondCentre As Point = Nothing
+
+    For Each oEdge As Edge In oFace.Edges
+
+        Try
+
+            If TypeOf oEdge.Geometry Is Circle Then
+
+                Dim oCircle As Circle = _
+                    DirectCast(oEdge.Geometry, Circle)
+
+                If firstCentre Is Nothing Then
+
+                    firstCentre = oCircle.Center
+
+                Else
+
+                    secondCentre = oCircle.Center
+                    Exit For
+
+                End If
+
+            End If
+
+        Catch
+
+        End Try
+
+    Next
+
+    If firstCentre Is Nothing OrElse secondCentre Is Nothing Then
+        Return 0.0
+    End If
+
+    Return firstCentre.DistanceTo(secondCentre) * 10.0
+
+End Function
+
+
+'---------------------------------------------------------------
+' CHECK WHETHER TWO CYLINDERS SHARE THE SAME AXIS
+'
+' Axis direction must be almost parallel.
+' Base points must lie on the same axis.
+'
+' Tolerance:
+'   0.5mm radial offset
+'---------------------------------------------------------------
+
+Function CylindersAreCoaxial( _
+    p1 As Point, _
+    ax1 As Double, _
+    ay1 As Double, _
+    az1 As Double, _
+    p2 As Point, _
+    ax2 As Double, _
+    ay2 As Double, _
+    az2 As Double) As Boolean
+
+    '-----------------------------------------------------------
+    ' AXIS LENGTHS
+    '-----------------------------------------------------------
+
+    Dim len1 As Double = _
+        Math.Sqrt(ax1 * ax1 + ay1 * ay1 + az1 * az1)
+
+    Dim len2 As Double = _
+        Math.Sqrt(ax2 * ax2 + ay2 * ay2 + az2 * az2)
+
+    If len1 = 0 OrElse len2 = 0 Then
+        Return False
+    End If
+
+    '-----------------------------------------------------------
+    ' NORMALISE AXES
+    '-----------------------------------------------------------
+
+    ax1 = ax1 / len1
+    ay1 = ay1 / len1
+    az1 = az1 / len1
+
+    ax2 = ax2 / len2
+    ay2 = ay2 / len2
+    az2 = az2 / len2
+
+    '-----------------------------------------------------------
+    ' CHECK PARALLEL
+    '-----------------------------------------------------------
+
+    Dim dotAxis As Double = _
+        ax1 * ax2 + _
+        ay1 * ay2 + _
+        az1 * az2
+
+    If Math.Abs(dotAxis) < 0.999 Then
+        Return False
+    End If
+
+    '-----------------------------------------------------------
+    ' VECTOR BETWEEN BASE POINTS
+    '-----------------------------------------------------------
+
+    Dim v As Vector = p2.VectorTo(p1)
+
+    Dim vx As Double = v.X
+    Dim vy As Double = v.Y
+    Dim vz As Double = v.Z
+
+    '-----------------------------------------------------------
+    ' COMPONENT PERPENDICULAR TO AXIS
+    '
+    ' Because the axis is normalised:
+    '
+    ' perpendicular² = vector² - parallel²
+    '-----------------------------------------------------------
+
+    Dim vectorLengthSq As Double = _
+        vx * vx + _
+        vy * vy + _
+        vz * vz
+
+    Dim parallelComponent As Double = _
+        vx * ax2 + _
+        vy * ay2 + _
+        vz * az2
+
+    Dim perpendicularSq As Double = _
+        vectorLengthSq - _
+        (parallelComponent * parallelComponent)
+
+    If perpendicularSq < 0 Then
+        perpendicularSq = 0
+    End If
+
+    Dim perpendicularDistanceCm As Double = _
+        Math.Sqrt(perpendicularSq)
+
+    '-----------------------------------------------------------
+    ' 0.05cm = 0.5mm
+    '-----------------------------------------------------------
+
+    If perpendicularDistanceCm <= 0.05 Then
+        Return True
+    End If
+
+    Return False
+
+End Function
+
+
+'---------------------------------------------------------------
+' CHECK IF FACE ALREADY EXISTS IN LIST
+'---------------------------------------------------------------
+
+Function FaceAlreadyListed( _
+    faceList As List(Of Face), _
+    testFace As Face) As Boolean
+
+    For Each existingFace As Face In faceList
+
+        Try
+
+            If existingFace Is testFace Then
+                Return True
+            End If
+
+        Catch
+
+        End Try
+
+    Next
+
+    Return False
+
+End Function
+
+
+'---------------------------------------------------------------
+' CHECK IF INTEGER ALREADY EXISTS
+'---------------------------------------------------------------
+
+Function IntegerListContains( _
+    numberList As List(Of Integer), _
+    testNumber As Integer) As Boolean
+
+    For Each n As Integer In numberList
+
+        If n = testNumber Then
+            Return True
+        End If
+
+    Next
+
+    Return False
+
+End Function
+
+
+'---------------------------------------------------------------
+' VALUE COMPARISON
+'---------------------------------------------------------------
+
+Function IsEqual( _
+    val1 As Double, _
+    val2 As Double, _
+    Optional tolerance As Double = 0.05) As Boolean
+
+    Return Math.Abs(val1 - val2) <= tolerance
+
+End Function

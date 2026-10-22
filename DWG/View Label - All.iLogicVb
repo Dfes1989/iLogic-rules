@@ -1,0 +1,66 @@
+﻿Sub Main()
+    ' Ensure we are in a drawing
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then
+        MessageBox.Show("Please open a drawing.", "Wrong Document Type")
+        Exit Sub
+    End If
+
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+    Dim oTG As TransientGeometry = ThisApplication.TransientGeometry
+
+    ' Variable to track if we need to repeat the loop
+    Dim happyWithResult As MsgBoxResult = MsgBoxResult.No
+    
+    ' Set the initial default value
+    Dim defaultOffset As String = ".908"
+
+    Do While happyWithResult = MsgBoxResult.No
+        
+        ' 1. Pop up box to ask for the offset distance
+        Dim userInput As String = InputBox("Enter the label offset distance above the view:", "Label Offset", defaultOffset)
+        
+        ' Safely exit if the user hits Cancel or leaves it blank
+        If String.IsNullOrEmpty(userInput) Then Exit Sub
+        
+        Dim offsetValue As Double
+        If Not Double.TryParse(userInput, offsetValue) Then
+            MessageBox.Show("Invalid number entered. Exiting rule.", "Error")
+            Exit Sub
+        End If
+        
+        ' Save the current valid input as the new default in case they run the loop again
+        defaultOffset = userInput
+
+        Dim count As Integer = 0
+
+        ' 2. Loop through ALL views on the active sheet
+        For Each oView As DrawingView In oSheet.DrawingViews
+            Try
+                If oView.ShowLabel Then
+                    ' Centre the label horizontally on the view
+                    Dim x As Double = oView.Center.X
+
+                    ' Position ABOVE the view using your custom input value
+                    Dim y As Double = oView.Top + offsetValue
+
+                    oView.Label.Position = oTG.CreatePoint2d(x, y)
+
+                    count += 1
+                End If
+            Catch
+                ' Safely skip any individual view calculation errors
+            End Try
+        Next
+
+        ' Update the document immediately so you can see the changes on screen
+        oDoc.Update()
+
+        ' 3. Ask the user if they want to tweak it or exit
+        happyWithResult = MessageBox.Show(count & " labels positioned at Top + " & offsetValue & vbLf & vbLf & _
+                                          "Are you happy with the position?", _
+                                          "Verify Alignment", _
+                                          MessageBoxButtons.YesNo, _
+                                          MessageBoxIcon.Question)
+    Loop
+End Sub

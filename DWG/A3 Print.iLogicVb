@@ -1,0 +1,41 @@
+﻿Sub Main()
+    Dim oDoc As DrawingDocument = TryCast(ThisApplication.ActiveDocument, DrawingDocument)
+    If oDoc Is Nothing Then Return
+
+    Dim oPrintMgr As DrawingPrintManager = oDoc.PrintManager
+    
+    ' Standard Settings
+    oPrintMgr.ColorMode = 1 ' kPrintColorPalette
+    oPrintMgr.NumberOfCopies = 1
+    oPrintMgr.PrintRange = 14083 ' kPrintSheetRange
+    oPrintMgr.ScaleMode = 13313 ' kBestFitScale
+    oPrintMgr.PaperSize = 14338 ' kPaperSizeA3
+
+    Dim count As Integer = 0
+
+    ' Loop through sheets by their numerical position (1 to Total Count)
+    For i As Integer = 1 To oDoc.Sheets.Count
+        Dim oSheet As Sheet = oDoc.Sheets.Item(i)
+        
+        ' Check if it is A3 and not excluded
+        If oSheet.Size = DrawingSheetSizeEnum.kA3DrawingSheetSize AndAlso oSheet.ExcludeFromPrinting = False Then
+            
+            ' Activate the sheet so the printer sees the correct geometry
+            oSheet.Activate()
+            
+            ' Pass the loop integer 'i' directly
+            ' This is guaranteed to be an Integer, fixing the conversion error
+            oPrintMgr.SetSheetRange(i, i)
+            
+            ' Submit the job
+            oPrintMgr.SubmitPrint()
+            count += 1
+        End If
+    Next
+
+    If count > 0 Then
+        MessageBox.Show("Sent " & count & " A3 sheets to the printer.", "Success")
+    Else
+        MessageBox.Show("No A3 sheets found.", "Done")
+    End If
+End Sub

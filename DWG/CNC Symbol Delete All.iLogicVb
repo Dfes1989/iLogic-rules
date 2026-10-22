@@ -1,0 +1,27 @@
+﻿Sub Main()
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then Return
+
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSheet As Sheet = oDoc.ActiveSheet
+    
+    ' Change this to your exact layer name
+    Dim targetLayerName As String = "#CNC labels" 
+    
+    Dim deletedCount As Integer = 0
+    
+    ' 1. Loop through and delete General Notes on that layer
+    ' Working backwards (Reverse loop) is critical when deleting items from a collection!
+    For i As Integer = oSheet.DrawingNotes.GeneralNotes.Count To 1 Step -1
+        Dim oNote As GeneralNote = oSheet.DrawingNotes.GeneralNotes.Item(i)
+        
+        If oNote.Layer.Name = targetLayerName Then
+            oNote.Delete()
+            deletedCount += 1
+        End If
+    Next
+    
+    ' Update the sheet view
+    oDoc.Update()
+    
+    MessageBox.Show("Successfully cleared " & deletedCount & " item(s) from layer '" & targetLayerName & "'.", "Layer Cleared")
+End Sub

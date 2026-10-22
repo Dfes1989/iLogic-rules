@@ -1,0 +1,35 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    ' Make sure the active document is a drawing
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then
+        MessageBox.Show("Please run this rule in a Drawing Document.", "Invalid Document")
+        Exit Sub
+    End If
+
+    ' Reference the drawing document
+    Dim oDrawDoc As DrawingDocument = ThisApplication.ActiveDocument
+
+    ' Loop through all sheets
+    For Each oSheet As Sheet In oDrawDoc.Sheets
+        ' Activate the sheet
+        oSheet.Activate()
+
+        ' Fit the view to the entire sheet
+        ThisApplication.ActiveView.Fit()
+        ThisApplication.ActiveView.Update()
+
+        ' Optional: Pause to allow the user to see each sheet (in seconds)
+        ' WARNING: This will delay the rule, just for visual confirmation
+        Call Pause(1) ' Pauses for 1 second per sheet
+    Next
+
+    MessageBox.Show("Zoom All applied to all sheets.", "Done")
+End Sub
+
+' Helper method to pause execution (in seconds)
+Sub Pause(seconds As Double)
+    Dim waitUntil As DateTime = Now.AddSeconds(seconds)
+    Do While Now < waitUntil
+        System.Windows.Forms.Application.DoEvents()
+    Loop
+End Sub

@@ -1,0 +1,57 @@
+﻿' <FireOthersImmediately>False</FireOthersImmediately>
+Sub Main()
+    ' Ensure we are in a drawing
+    If ThisApplication.ActiveDocumentType <> DocumentTypeEnum.kDrawingDocumentObject Then
+        MessageBox.Show("Please run this in a Drawing.", "Wrong Document Type")
+        Exit Sub
+    End If
+
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    Dim oSelectSet As SelectSet = oDoc.SelectSet
+
+    ' 1. Check if the user has actually selected anything
+    If oSelectSet.Count = 0 Then
+        MessageBox.Show("Please select at least one drawing view first.", "No Views Selected")
+        Exit Sub
+    End If
+
+    ' 2. Filter the selection to only grab Drawing Views
+    Dim selectedViews As New List(Of DrawingView)
+    For Each obj As Object In oSelectSet
+        If TypeOf obj Is DrawingView Then
+            selectedViews.Add(DirectCast(obj, DrawingView))
+        End If
+    Next
+
+    If selectedViews.Count = 0 Then
+        MessageBox.Show("Please ensure you have selected a Drawing View.", "Invalid Selection")
+        Exit Sub
+    End If
+
+    ' 3. Get the current scale of the FIRST selected view to use as the default text
+    Dim oCurrentScale As String = selectedViews(0).ScaleString
+    
+    Dim oScaleInput As String = InputBox("Enter new scale (e.g., 1:5, 1/5, or 0.2)", "Scale Selected Views", oCurrentScale)
+    
+    ' Exit if they hit Cancel or leave it blank
+    If String.IsNullOrWhiteSpace(oScaleInput) Then Exit Sub
+
+    ' FIX: Swap colons for slashes so Inventor's math evaluator can understand it
+    Dim mathSafeString As String = oScaleInput.Replace(":", "/")
+
+    ' 4. Safely evaluate the math/fraction they typed in
+    Dim newScale As Double
+    Try
+        newScale = ThisApplication.UnitsOfMeasure.GetValueFromExpression(mathSafeString, UnitsTypeEnum.kUnitlessUnits)
+    Catch
+        MessageBox.Show("Inventor could not calculate that scale format.", "Error")
+        Exit Sub
+    End Try
+
+    ' 5. Apply the scale to ONLY the selected views
+    For Each oView As DrawingView In selectedViews
+        If oView.ScaleFromBase = False Then
+            oView.Scale = newScale
+        End If
+    Next
+End Sub

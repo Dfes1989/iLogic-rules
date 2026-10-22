@@ -1,0 +1,46 @@
+﻿Sub Main()
+    Dim oDoc As DrawingDocument = ThisApplication.ActiveDocument
+    
+    ' 1. Access the selected objects on screen
+    Dim oSelectSet As SelectSet = oDoc.SelectSet
+    If oSelectSet.Count = 0 Then
+        MessageBox.Show("Please select the drawing views you want to change first.", "No Selection")
+        Exit Sub
+    End If
+
+    Dim count As Integer = 0
+
+    ' 2. Loop through only what you have highlighted
+    For Each oObj As Object In oSelectSet
+        
+        ' Ensure the selected item is actually a drawing view
+        If TypeOf oObj Is DrawingView Then
+            Dim oDrawView As DrawingView = DirectCast(oObj, DrawingView)
+            
+            Try
+                ' Run your precise style shifting logic
+                Select Case oDrawView.ViewStyle
+                    
+                    ' Shaded with Hidden Lines SHOWN -> Shaded (Hidden Lines Removed)
+                    Case DrawingViewStyleEnum.kShadedHiddenLineDrawingViewStyle
+                        oDrawView.ViewStyle = DrawingViewStyleEnum.kShadedDrawingViewStyle
+                        count += 1
+                    
+                    ' Wireframe with Hidden Lines SHOWN -> Standard Hidden Lines REMOVED
+                    Case DrawingViewStyleEnum.kHiddenLineDrawingViewStyle
+                        oDrawView.ViewStyle = DrawingViewStyleEnum.kHiddenLineRemovedDrawingViewStyle
+                        count += 1
+                        
+                End Select
+            Catch
+                ' Safely skip any locked views
+            End Try
+        End If
+    Next
+
+    ' 3. Refresh only if views were actually updated
+    If count > 0 Then
+        oDoc.Update()
+        StatusBarText = count & " selected views updated to Hidden Lines Removed."
+    End If
+End Sub

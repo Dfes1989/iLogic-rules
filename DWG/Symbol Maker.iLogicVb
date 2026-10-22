@@ -1,0 +1,40 @@
+﻿Dim oDrawDoc As DrawingDocument
+oDrawDoc = ThisApplication.ActiveDocument
+
+Dim Prefix As String
+Prefix = InputBox("Enter text prefix", "Symbol Creator", "CNC")
+
+Dim StartNum As Integer
+StartNum = CInt(InputBox("Start Number", "Symbol Creator", "1"))
+
+Dim EndNum As Integer
+EndNum = CInt(InputBox("End Number", "Symbol Creator", "10"))
+
+Dim oTemplate As SketchedSymbolDefinition
+oTemplate = oDrawDoc.SketchedSymbolDefinitions.Item("_TEMPLATE")
+
+For i As Integer = StartNum To EndNum
+
+    Dim NewText As String
+    NewText = Prefix & " " & i
+
+    Dim CountBefore As Integer
+    CountBefore = oDrawDoc.SketchedSymbolDefinitions.Count
+
+    oTemplate.CopyTo(oDrawDoc)
+
+    Dim oNewDef As SketchedSymbolDefinition
+    oNewDef = oDrawDoc.SketchedSymbolDefinitions.Item(CountBefore + 1)
+
+    oNewDef.Name = NewText
+
+    Dim oSketch As DrawingSketch
+    oNewDef.Edit(oSketch)
+
+    oSketch.TextBoxes.Item(1).Text = NewText
+
+    oNewDef.ExitEdit(True)
+
+Next
+
+MsgBox("Created " & (EndNum - StartNum + 1) & " symbols.")

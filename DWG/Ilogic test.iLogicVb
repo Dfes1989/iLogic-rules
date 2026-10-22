@@ -1,0 +1,5 @@
+﻿Dim oDrawDoc As DrawingDocument
+oDrawDoc = ThisApplication.ActiveDocument
+
+MessageBox.Show( _
+oDrawDoc.SketchedSymbolDefinitions.Item("_TEMPLATE").Name)
